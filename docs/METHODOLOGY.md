@@ -14,11 +14,15 @@ numbers below exactly (to 1e-10).
    is the per-share dividend paid on day `t` (zero on most days). Dividends are modeled as
    immediately reinvested in the paying security at the day-`t` closing price, so portfolio
    market values and security returns stay mutually consistent.
-4. **Portfolio weights are beginning-of-day weights:** security `i`'s weight on day `t` is
-   `w_i,t = q_i,t * p_i,(t-1) / Σ_j q_j,t * p_j,(t-1)` — the day-`t` holding valued at the
-   prior close. Because flows trade at the prior close, the denominator equals
-   `MV_(t-1) + CF_t`, which makes the weight-based and market-value-based portfolio returns
-   identical (proved in the worked example).
+4. **Portfolio weights are prior-close market-value weights:** security `i`'s weight on day
+   `t` is `w_i,t = MV_i,(t-1) / Σ_j MV_j,(t-1)`. External flows are assumed to be invested
+   pro-rata across existing holdings at the prior close (the data generator guarantees
+   this), so flows scale every position equally and do not disturb weights. Under that
+   assumption the weight-based portfolio return `Σ w_i,t * r_i,t` equals the
+   market-value-based sub-period return `r_t` from the TWR section *exactly* — this is
+   asserted as a property test. When a flow is **not** pro-rata (as in the worked example's
+   day 2), the two can differ for that day; attribution always uses the weight-based
+   definition, and the per-day attribution invariant is stated against it.
 5. **Benchmark weights** in `benchmark_weights` are beginning-of-day weights for that date:
    the benchmark's day-`t` return is `Σ_i wb_i,t * rb_i,t`.
 
@@ -134,9 +138,11 @@ r_1 = (4040 - 4000 - 0) / (4000 + 0) = 40 / 4000 = 0.01
 r_2 = (5150 - 4040 - 1020) / (4040 + 1020) = 90 / 5060 = 0.0177865612648221...
 ```
 
-*Consistency check for Conventions §4:* the beginning-of-day basis (day-2 holdings at day-1
-prices) is 100·10.50 + 50·19.00 + 400·5.10 + 25·40.80 = 1,050 + 950 + 2,040 + 1,020 = 5,060
-= MV_begin + CF. The weight-based and MV-based returns agree.
+*Denominator check:* the beginning-of-day invested basis (day-2 holdings at day-1 prices) is
+100·10.50 + 50·19.00 + 400·5.10 + 25·40.80 = 1,050 + 950 + 2,040 + 1,020 = 5,060
+= MV_begin + CF, confirming the w = 1 convention. (Note this flow buys a single security —
+it is *not* pro-rata — so day 2 is a TWR illustration only; the attribution assertions below
+use day 1, which has no flow.)
 
 **Day 3** (no flow): MV_end = 100·11.11 + 50·19.38 + 400·5.20 + 25·41.00
 = 1,111 + 969 + 2,080 + 1,025 = **5,185**.
