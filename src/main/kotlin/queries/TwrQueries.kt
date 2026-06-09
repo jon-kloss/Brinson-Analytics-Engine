@@ -5,6 +5,8 @@ import java.time.LocalDate
 
 data class DailyValuation(
     val date: LocalDate,
+    /** The trading day mvBegin was observed on (the prior close) — the true period start. */
+    val beginDate: LocalDate,
     val mvBegin: Double,
     val mvEnd: Double,
     val externalFlow: Double,
@@ -33,7 +35,8 @@ fun dailyValuations(
             WHERE portfolio_id = $portfolioId AND type = 'CASHFLOW' AND date <= DATE '$to'
             GROUP BY date
         )
-        SELECT m.date, lag(m.mv) OVER (ORDER BY m.date) AS mv_begin, m.mv AS mv_end,
+        SELECT m.date, lag(m.date) OVER (ORDER BY m.date) AS begin_date,
+               lag(m.mv) OVER (ORDER BY m.date) AS mv_begin, m.mv AS mv_end,
                coalesce(f.cf, 0.0) AS cf
         FROM mv m
         LEFT JOIN flows f USING (date)
@@ -47,9 +50,10 @@ fun dailyValuations(
                     add(
                         DailyValuation(
                             date = rs.getDate(1).toLocalDate(),
-                            mvBegin = rs.getDouble(2),
-                            mvEnd = rs.getDouble(3),
-                            externalFlow = rs.getDouble(4),
+                            beginDate = rs.getDate(2).toLocalDate(),
+                            mvBegin = rs.getDouble(3),
+                            mvEnd = rs.getDouble(4),
+                            externalFlow = rs.getDouble(5),
                         ),
                     )
                 }

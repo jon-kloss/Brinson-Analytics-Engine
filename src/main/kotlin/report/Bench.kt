@@ -23,7 +23,14 @@ private fun bench(label: String, warmup: Int, runs: Int, echo: (String) -> Unit,
         echo("    $label run $it/$runs: ${ms} ms")
         ms
     }
-    return BenchResult(label, times.sorted()[times.size / 2], times)
+    return BenchResult(label, median(times), times)
+}
+
+/** True median: averages the two middle values for even run counts. */
+private fun median(times: List<Long>): Long {
+    val sorted = times.sorted()
+    val mid = sorted.size / 2
+    return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
 }
 
 fun maxAbsDiff(a: List<AttributionRow>, b: List<AttributionRow>): Double {
@@ -57,7 +64,7 @@ fun runBench(
         st.executeQuery("SELECT count(*) FROM positions_daily").use { rs -> rs.next(); rs.getLong(1) }
     }
     echo("Benchmark: full-range attribution, all portfolios, $from .. $to")
-    echo("positions_daily rows: %,d".format(positionRows))
+    echo("positions_daily rows: %,d".fmt(positionRows))
     echo("")
 
     echo("Verifying the two paths agree before timing them...")
@@ -65,7 +72,7 @@ fun runBench(
     val optimizedResult = optimizedAttribution(conn, from, to)
     val diff = maxAbsDiff(naiveResult, optimizedResult)
     check(diff < 1e-8) { "naive and optimized results diverge: max abs diff $diff" }
-    echo("  OK - identical results (max abs effect diff: %.2e)".format(diff))
+    echo("  OK - identical results (max abs effect diff: %.2e)".fmt(diff))
     echo("")
 
     val results = mutableListOf<BenchResult>()
@@ -88,14 +95,14 @@ fun runBench(
     echo("|---|---|---|")
     val baseline = results.first().medianMillis.toDouble()
     for (r in results) {
-        val speedup = if (r === results.first()) "" else " (%.1fx faster)".format(baseline / r.medianMillis)
+        val speedup = if (r === results.first()) "" else " (%.1fx faster)".fmt(baseline / r.medianMillis)
         echo("| ${r.label} | ${r.medianMillis} ms$speedup | ${r.runsMillis.joinToString(", ")} |")
     }
     echo("")
     val runtime = Runtime.getRuntime()
     echo(
         "Hardware: ${runtime.availableProcessors()} cores, JVM max heap %.1f GB, %s %s"
-            .format(
+            .fmt(
                 runtime.maxMemory() / 1e9,
                 System.getProperty("os.name"),
                 System.getProperty("os.arch"),
