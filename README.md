@@ -113,6 +113,7 @@ Portfolio 007  |  2024-01-03 .. 2025-12-08  (504 trading days)
   TWR (portfolio):          +33.18%   (annualized +15.98%)
   TWR (benchmark):          +25.51%   (annualized +12.47%)
   Active return:             +7.67%   (geometric: +6.11%)
+  Tracking error (ann):      +2.49%   (IR: 1.19,  max drawdown: -16.97%)
 
 Brinson-Fachler attribution by sector  (Carino-linked daily effects, in bps)
 ------------------------------------------------------------------------------
@@ -144,6 +145,22 @@ Top contributors (sum of daily w*r, in bps)
   SEC151   Information Technology       -24.2
   SEC406   Utilities                    -25.1
 ```
+
+## Dashboard
+
+A static, dependency-free dashboard over all 50 portfolios — portfolio picker, date-range
+presets, cumulative TWR vs benchmark, risk cards (tracking error, information ratio, max
+drawdown), the Cariño-linked attribution waterfall, contributors, and weekly sector weights:
+
+```bash
+build/install/brinson/bin/brinson dashboard   # bakes docs/dashboard/{index.html,data.json}
+```
+
+The site is committed under `docs/dashboard/` and hosted free on **GitHub Pages**
+(Settings → Pages → Deploy from a branch → `main` / `docs`); range recomputation happens
+client-side from the baked daily return series using the METHODOLOGY.md formulas.
+(Opening `index.html` from the filesystem won't work — `fetch` needs HTTP; use Pages or
+`python3 -m http.server` in the directory.)
 
 ## Quickstart
 

@@ -155,6 +155,25 @@ The **benchmark query paths** (`bench`, the naive/optimized equivalence) still a
 raw arithmetic sums of daily effects — linking is a per-portfolio report-layer concern,
 deliberately kept out of the timed aggregation workload.
 
+## Risk metrics
+
+With daily active returns `act_t = rp_t − rb_t` over `n` days (P = 252 periods/year):
+
+```
+Tracking error (ann.) TE = stdev_sample(act) · sqrt(P)
+Information ratio     IR = mean(act) · P / TE        (undefined when TE = 0)
+Max drawdown          MD = min_t (G_t / peak_t − 1),  G_t = prod_{u<=t}(1 + rp_u)
+```
+
+Worked numbers (reproduced by `RiskTest`): `act = [+1%, −1%, +1%, −1%]` has sample
+stdev 0.011547005384, so TE = 0.183303027798. For `act = [0.2%, 0.1%, 0.3%, 0.0%]`,
+IR = 18.444511378727 (short series produce extreme IRs; the statistic is only
+meaningful at sample sizes where sqrt(P)-scaling is sensible). A return path of
++10%, −10%, +6.0606...% has curve 1.10 → 0.99 → 1.05 and MD = −10% (0.99/1.10 − 1).
+
+The dashboard recomputes these client-side for the selected date range from the
+baked daily series, using these exact definitions.
+
 ## Contribution
 
 Per-security contribution to a single-period portfolio return:

@@ -22,6 +22,7 @@ import report.buildHtmlReport
 import report.buildReport
 import report.printQueryPlan
 import report.runBench
+import report.writeDashboard
 
 class Brinson : CliktCommand(name = "brinson") {
     override fun run() = Unit
@@ -118,5 +119,16 @@ class Bench : CliktCommand(name = "bench") {
     }
 }
 
+class Dashboard : CliktCommand(name = "dashboard") {
+    private val db by option().default("data/brinson.duckdb")
+    private val out by option(help = "Output directory for the static site").default("docs/dashboard")
+
+    override fun run() {
+        openDatabase(Path.of(db)).use { conn ->
+            writeDashboard(conn, Path.of(out), ::echo)
+        }
+    }
+}
+
 fun main(args: Array<String>) =
-    Brinson().subcommands(Generate(), Load(), Report(), Bench()).main(args)
+    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard()).main(args)
