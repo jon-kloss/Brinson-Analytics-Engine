@@ -1,6 +1,6 @@
 # brinson — Portfolio Performance & Attribution Engine
 
-![CI](https://github.com/jon-kloss/Brinson-Analytics-Engine/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/jon-kloss/brinson/actions/workflows/ci.yml/badge.svg)
 
 A compact analytics engine that computes time-weighted returns and Brinson-Fachler
 performance attribution for equity portfolios, built in Kotlin on embedded DuckDB. A
