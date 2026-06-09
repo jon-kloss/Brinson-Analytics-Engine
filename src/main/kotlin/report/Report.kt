@@ -25,6 +25,10 @@ private fun bps(x: Double): String = "%+7.1f".fmt(x * 10_000)
  * Per-sector Brinson-Fachler effects, Carino-linked across days so they sum to the
  * geometric active return of the attribution return series (METHODOLOGY.md,
  * "Multi-period linking"). Weights are reported as simple daily averages.
+ *
+ * Precondition: the portfolio holds priced positions on every day in range. A
+ * positionless day would enter the linking as a fictitious 0% portfolio return
+ * against a real benchmark day. The generator cannot produce such days.
  */
 fun carinoLinkedAttribution(
     conn: Connection,
@@ -37,6 +41,8 @@ fun carinoLinkedAttribution(
         .toSortedMap()
     val factors = carinoFactors(
         byDate.values.map { rows ->
+            // rb_total is constant per date by construction (one benchmark mean per
+            // day), so reading it off the first row is safe.
             PeriodReturns(rows.sumOf { it.wp * it.rp }, rows.first().rbTotal)
         },
     )

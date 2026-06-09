@@ -3,7 +3,10 @@ package queries
 import datagen.DataGenerator
 import datagen.GenParams
 import datagen.tradingCalendar
+import engine.PeriodReturns
+import engine.cumulativeActiveReturn
 import engine.subPeriodReturn
+import report.carinoLinkedAttribution
 import etl.loadFromParquet
 import etl.openDatabase
 import etl.openInMemory
@@ -107,11 +110,11 @@ class PipelinePropertyTest {
                 val daily = optimizedAttributionDaily(conn, calendar[1], calendar.last(), portfolioFilter = pf)
                     .groupBy { it.date }.toSortedMap().values
                 val periods = daily.map { rows ->
-                    engine.PeriodReturns(rows.sumOf { it.wp * it.rp }, rows.first().rbTotal)
+                    PeriodReturns(rows.sumOf { it.wp * it.rp }, rows.first().rbTotal)
                 }
-                val linked = report.carinoLinkedAttribution(conn, calendar[1], calendar.last(), pf)
+                val linked = carinoLinkedAttribution(conn, calendar[1], calendar.last(), pf)
                 val totalLinked = linked.sumOf { it.total }
-                assertEquals(engine.cumulativeActiveReturn(periods), totalLinked, 1e-10, "pf=$pf")
+                assertEquals(cumulativeActiveReturn(periods), totalLinked, 1e-10, "pf=$pf")
             }
         }
     }

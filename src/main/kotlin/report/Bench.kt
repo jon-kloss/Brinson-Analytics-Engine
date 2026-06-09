@@ -5,6 +5,7 @@ import java.sql.Connection
 import java.time.LocalDate
 import kotlin.math.abs
 import queries.AttributionRow
+import queries.attributionSql
 import queries.naiveAttribution
 import queries.optimizedAttribution
 
@@ -58,10 +59,14 @@ fun printQueryPlan(conn: Connection, echo: (String) -> Unit) {
     }
     conn.createStatement().use { st ->
         st.executeQuery(
-            "EXPLAIN ANALYZE " + queries.attributionSql(from, to, perDay = false),
+            "EXPLAIN ANALYZE " + attributionSql(from, to, perDay = false),
         ).use { rs ->
             val cols = rs.metaData.columnCount
-            while (rs.next()) for (c in 1..cols) rs.getString(c)?.let { echo(it) }
+            var lines = 0
+            while (rs.next()) for (c in 1..cols) rs.getString(c)?.let { echo(it); lines++ }
+            // DuckDB has changed EXPLAIN's result shape across versions; an empty plan
+            // should be loud, not an empty file someone commits without noticing.
+            check(lines > 0) { "EXPLAIN ANALYZE returned no plan text (DuckDB output shape changed?)" }
         }
     }
 }

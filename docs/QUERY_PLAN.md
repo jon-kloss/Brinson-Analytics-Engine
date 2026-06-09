@@ -1,9 +1,11 @@
 # Query plan: optimized attribution (EXPLAIN ANALYZE)
 
-Captured with `brinson bench --explain` against the full-scale database
-(10,377,750 position rows, full 504-day range, all 50 portfolios). Profiling
-instrumentation adds overhead — the README's timed medians (1.33 s) come from
-warm, uninstrumented runs.
+Captured with `brinson bench --explain` against the full-scale database at
+`--scale 1.0` (10,377,750 position rows, full 504-day range, all 50 portfolios);
+the operator row counts below are specific to that scale. The total time shown in
+the plan exceeds the README's timed medians for two reasons: profiling
+instrumentation adds overhead, and the plan was captured on a fresh connection
+(cold buffer state) while the README medians are warm, uninstrumented runs.
 
 ## How to read it
 

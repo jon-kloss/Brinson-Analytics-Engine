@@ -7,8 +7,8 @@ performance attribution for equity portfolios, built in Kotlin on embedded DuckD
 synthetic-data ETL pipeline (generator → Parquet → DuckDB) feeds a star-schema fact table,
 and the same attribution math is implemented twice — once as naive JVM-side aggregation,
 once as single-pass columnar SQL — to make the optimization win measurable:
-**Brinson-Fachler attribution over 10.4M position rows runs in 1.33 s in DuckDB —
-5.0x faster than the naive JVM aggregation, with both paths agreeing to within 3.5e-17.**
+**Brinson-Fachler attribution over 10.4M position rows runs in 1.31 s in DuckDB —
+6.7x faster than the naive JVM aggregation, with both paths agreeing to within 5.2e-17.**
 
 ## The finance, in two paragraphs
 
@@ -66,13 +66,13 @@ median of 5 runs after 1 warmup, produced by `brinson bench`:
 
 | Variant | Median | Runs (ms) |
 |---|---|---|
-| naive (JDBC transfer + JVM hash aggregation) | 6,683 ms | 6808, 6362, 6683, 7375, 6333 |
-| optimized (single-pass SQL in DuckDB) | **1,333 ms (5.0x faster)** | 1393, 1291, 1333, 1277, 1338 |
-| optimized (SQL directly over Parquet) | 1,432 ms (4.7x faster) | 1480, 1409, 1403, 1454, 1432 |
+| naive (JDBC transfer + JVM hash aggregation) | 8,785 ms | 8543, 8785, 8741, 8883, 8959 |
+| optimized (single-pass SQL in DuckDB) | **1,314 ms (6.7x faster)** | 1326, 1337, 1291, 1266, 1314 |
+| optimized (SQL directly over Parquet) | 1,364 ms (6.4x faster) | 1354, 1442, 1438, 1364, 1351 |
 
 Hardware: 4-core Linux amd64 container, JVM max heap 4 GB (DuckDB works off-heap).
 Before timing, the harness asserts both paths return the same effects
-(max abs difference observed: 3.5e-17).
+(max abs difference observed: 5.2e-17).
 
 Honest framing: the naive path is not a strawman — the math and even the scan order are
 identical; it pays for moving 10.4M rows across the JDBC boundary and aggregating them
@@ -84,20 +84,24 @@ The annotated `EXPLAIN ANALYZE` plan is in [docs/QUERY_PLAN.md](docs/QUERY_PLAN.
 ### Scaling
 
 Same benchmark across data sizes (`--scale` 0.1 → 2.0, median of 3 runs after warmup;
-at scale 2.0 holdings saturate against the 500-security universe):
+at scale 2.0 holdings saturate against the 500-security universe). All timings in this
+section and the table above come from the same session on the same hardware; the
+full-scale row here repeats the headline configuration with 3 runs instead of 5, and the
+medians agree to within 1%:
 
-| Rows | Naive | Optimized | Speedup |
-|---|---|---|---|
-| 1,059,995 | 1,389 ms | 225 ms | 6.2x |
-| 2,610,850 | 2,858 ms | 416 ms | 6.9x |
-| 5,244,930 | 5,023 ms | 775 ms | 6.5x |
-| 10,377,750 | 8,812 ms | 1,304 ms | 6.8x |
-| 12,123,535 | 10,080 ms | 1,449 ms | 7.0x |
+| Rows | Naive | µs/row | Optimized | µs/row | Speedup |
+|---|---|---|---|---|---|
+| 1,059,995 | 1,389 ms | 1.31 | 225 ms | 0.21 | 6.2x |
+| 2,610,850 | 2,858 ms | 1.09 | 416 ms | 0.16 | 6.9x |
+| 5,244,930 | 5,023 ms | 0.96 | 775 ms | 0.15 | 6.5x |
+| 10,377,750 | 8,812 ms | 0.85 | 1,304 ms | 0.13 | 6.8x |
+| 12,123,535 | 10,080 ms | 0.83 | 1,449 ms | 0.12 | 7.0x |
 
-Both paths scale roughly linearly in row count — the difference is a constant factor of
-~6-7x, which is the cost of moving rows across the JDBC boundary instead of aggregating
-them where they live. Put differently: the optimized path processes 12.1M rows in roughly
-the time the naive path needs for 1M.
+Both paths are mildly *sublinear* — per-row cost falls ~35-40% from 1M to 12M rows as
+fixed overhead (JIT warmup, query setup) amortizes — and the gap between them is a
+roughly constant ~6-7x: the price of moving rows across the JDBC boundary instead of
+aggregating them where they live. Put differently: the optimized path processes 12.1M
+rows in roughly the time the naive path needs for 1M.
 
 ## Sample report
 
@@ -153,7 +157,7 @@ build/install/brinson/bin/brinson report --portfolio 7   # or: bench
 
 Full-scale `generate` simulates into an in-memory DuckDB before the Parquet dump — budget
 ~4 GB free RAM, or pass `--scale 0.1` for a laptop-friendly run. `bench` takes about a
-minute at defaults; the five ~7 s naive runs dominate.
+minute at defaults; the five ~9 s naive runs dominate.
 
 ## Future Work
 

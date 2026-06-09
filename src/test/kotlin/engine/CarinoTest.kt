@@ -28,6 +28,14 @@ class CarinoTest {
 
         val linkedActive = periods.zip(factors).sumOf { (p, f) -> f * (p.portfolio - p.benchmark) }
         assertEquals(0.0175, linkedActive, tolerance)
+
+        // Sector-effect scaling from the same doc section: per-day sector totals
+        // X = (+0.03, -0.01), Y = (+0.02, -0.02) decompose the per-day actives.
+        val linkedX = factors[0] * 0.03 + factors[1] * -0.01
+        val linkedY = factors[0] * 0.02 + factors[1] * -0.02
+        assertEquals(+0.019097444362, linkedX, 1e-12)
+        assertEquals(-0.001597444362, linkedY, 1e-12)
+        assertEquals(0.0175, linkedX + linkedY, tolerance)
     }
 
     @Test
@@ -50,5 +58,17 @@ class CarinoTest {
         val flat = List(10) { PeriodReturns(0.01, 0.01) }
         val linked = flat.zip(carinoFactors(flat)).sumOf { (p, f) -> f * (p.portfolio - p.benchmark) }
         assertEquals(0.0, linked, tolerance)
+    }
+
+    @Test
+    fun `coefficient is stable for nearly-equal returns`() {
+        // A few-ulp difference must not trigger catastrophic cancellation in the log
+        // subtraction (a day with rp ~ rb can still carry large offsetting sector
+        // effects, all multiplied by this coefficient).
+        assertEquals(1.0 / 1.05, carinoCoefficient(0.05, 0.05 + 1e-15), 1e-9)
+        assertEquals(1.0 / 1.05, carinoCoefficient(0.05 + 1e-15, 0.05), 1e-9)
+        // Just outside the tolerance window the exact formula must agree with the
+        // limit form to the same order, so no discontinuity at the branch boundary.
+        assertEquals(1.0 / 1.05, carinoCoefficient(0.05, 0.05 + 1e-8), 1e-7)
     }
 }

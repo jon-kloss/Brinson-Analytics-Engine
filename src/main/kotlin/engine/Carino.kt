@@ -1,5 +1,6 @@
 package engine
 
+import kotlin.math.abs
 import kotlin.math.ln
 
 /** One period's portfolio and benchmark return (the attribution return series). */
@@ -7,12 +8,16 @@ data class PeriodReturns(val portfolio: Double, val benchmark: Double)
 
 /**
  * Cariño log-linking coefficient: k(a, b) = (ln(1+a) - ln(1+b)) / (a - b),
- * with the analytic limit 1/(1+a) when a = b.
+ * with the analytic limit 1/(1+a) as b -> a.
  * See METHODOLOGY.md "Multi-period linking (Cariño)".
  */
 fun carinoCoefficient(a: Double, b: Double): Double {
     require(a > -1.0 && b > -1.0) { "returns must exceed -100%: a=$a, b=$b" }
-    return if (a == b) 1.0 / (1.0 + a) else (ln(1.0 + a) - ln(1.0 + b)) / (a - b)
+    // Tolerance branch, not exact equality: for |a - b| of a few ulps the log
+    // subtraction cancels catastrophically and can corrupt the coefficient by tens
+    // of percent. The midpoint limit form is accurate to O((a-b)^2) in this window.
+    return if (abs(a - b) < 1e-9) 2.0 / (2.0 + a + b)
+    else (ln(1.0 + a) - ln(1.0 + b)) / (a - b)
 }
 
 /**

@@ -129,6 +129,22 @@ factor_2 = k_2/k = 1.074680545305 → scaled active  −0.032240416359
                                       sum          = 0.017500000000 ✓ = R_p − R_b
 ```
 
+**Scaling sector effects** (the factors apply to every effect, not just the actives):
+suppose the per-day actives above decompose into two sectors' total effects,
+X = (+0.03, −0.01) and Y = (+0.02, −0.02) — each day summing to that day's active
+(+0.05, −0.03). The linked per-sector values are
+
+```
+X: 0.994808327183·(+0.03) + 1.074680545305·(−0.01) = +0.019097444362
+Y: 0.994808327183·(+0.02) + 1.074680545305·(−0.02) = −0.001597444362
+                                                sum = +0.017500000000 ✓
+```
+
+Note the identity constrains only the *sum*: different linking algorithms (Cariño,
+Menchero, GRAP) distribute the reconciliation differently across sectors and periods —
+per-sector linked numbers are convention-dependent even though every method reconciles
+to the same total. This engine implements Cariño.
+
 Two notes. First, the reconciliation target is the *difference* of cumulative returns
 (`R_p − R_b`), the standard Cariño convention — not the ratio form `(1+R_p)/(1+R_b) − 1`.
 Second, `rp_t` here is the weight-based attribution return (Conventions §4); it equals the

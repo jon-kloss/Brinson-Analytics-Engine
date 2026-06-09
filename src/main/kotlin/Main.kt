@@ -20,6 +20,7 @@ import java.nio.file.Path
 import java.time.LocalDate
 import report.buildHtmlReport
 import report.buildReport
+import report.printQueryPlan
 import report.runBench
 
 class Brinson : CliktCommand(name = "brinson") {
@@ -105,7 +106,7 @@ class Bench : CliktCommand(name = "bench") {
     override fun run() {
         openDatabase(Path.of(db)).use { conn ->
             if (explain) {
-                report.printQueryPlan(conn, ::echo)
+                printQueryPlan(conn, ::echo)
                 return
             }
             val parquetDir = Path.of(parquet).takeIf { it.toFile().isDirectory }
