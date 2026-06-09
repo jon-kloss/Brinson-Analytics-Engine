@@ -2,6 +2,7 @@ package queries
 
 import datagen.DataGenerator
 import datagen.GenParams
+import datagen.tradingCalendar
 import engine.subPeriodReturn
 import etl.loadFromParquet
 import etl.openDatabase
@@ -9,10 +10,11 @@ import etl.openInMemory
 import etl.writeParquet
 import java.nio.file.Files
 import java.sql.Connection
-import kotlin.math.abs
+import java.time.LocalDate
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.deleteRecursively
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Property-style tests on generated data at small scale, run through the full
@@ -21,28 +23,32 @@ import kotlin.test.assertTrue
  */
 class PipelinePropertyTest {
 
-    private fun withPipeline(seed: Long, block: (Connection, GenParams) -> Unit) {
+    @OptIn(ExperimentalPathApi::class)
+    private fun withPipeline(seed: Long, block: (Connection, GenParams, List<LocalDate>) -> Unit) {
         val params = GenParams(seed = seed, securities = 80, portfolios = 8, tradingDays = 30, scale = 0.06)
+        val calendar = tradingCalendar(params.startDate, params.tradingDays)
         val parquetDir = Files.createTempDirectory("brinson-pq")
-        val dbPath = Files.createTempDirectory("brinson-db").resolve("test.duckdb")
-        openInMemory().use { mem ->
-            DataGenerator(params).generateInto(mem)
-            writeParquet(mem, parquetDir)
-        }
-        openDatabase(dbPath).use { conn ->
-            loadFromParquet(conn, parquetDir)
-            block(conn, params)
+        val dbDir = Files.createTempDirectory("brinson-db")
+        try {
+            openInMemory().use { mem ->
+                DataGenerator(params).generateInto(mem)
+                writeParquet(mem, parquetDir)
+            }
+            openDatabase(dbDir.resolve("test.duckdb")).use { conn ->
+                loadFromParquet(conn, parquetDir)
+                block(conn, params, calendar)
+            }
+        } finally {
+            parquetDir.deleteRecursively()
+            dbDir.deleteRecursively()
         }
     }
 
     @Test
     fun `per-day attribution effects sum to active return for every portfolio and day`() {
         for (seed in listOf(1L, 42L, 99L)) {
-            withPipeline(seed) { conn, params ->
-                val gen = DataGenerator(params)
-                val from = gen.dates[1]
-                val to = gen.dates.last()
-                val byPfDay = optimizedAttributionDaily(conn, from, to)
+            withPipeline(seed) { conn, params, calendar ->
+                val byPfDay = optimizedAttributionDaily(conn, calendar[1], calendar.last())
                     .groupBy { it.portfolioId to it.date }
                 assertEquals(params.portfolios * params.tradingDays, byPfDay.size)
                 for ((key, rows) in byPfDay) {
@@ -61,14 +67,11 @@ class PipelinePropertyTest {
     fun `weight-based attribution return equals MV-based TWR sub-period return`() {
         // Holds because the generator invests external flows pro-rata at the prior close
         // (METHODOLOGY.md Conventions §4).
-        withPipeline(42L) { conn, params ->
-            val gen = DataGenerator(params)
-            val from = gen.dates[1]
-            val to = gen.dates.last()
-            val attributionByPfDay = optimizedAttributionDaily(conn, from, to)
+        withPipeline(42L) { conn, params, calendar ->
+            val attributionByPfDay = optimizedAttributionDaily(conn, calendar[1], calendar.last())
                 .groupBy { it.portfolioId to it.date }
             for (pf in 1..params.portfolios) {
-                for (v in dailyValuations(conn, pf, from, to)) {
+                for (v in dailyValuations(conn, pf, calendar[1], calendar.last())) {
                     val twrReturn = subPeriodReturn(v.mvBegin, v.mvEnd, v.externalFlow)
                     val weightReturn = attributionByPfDay.getValue(pf to v.date).sumOf { it.wp * it.rp }
                     assertEquals(twrReturn, weightReturn, 1e-9, "mismatch pf=$pf ${v.date}")
@@ -80,19 +83,18 @@ class PipelinePropertyTest {
     @Test
     fun `naive and optimized attribution produce identical results`() {
         for (seed in listOf(1L, 42L)) {
-            withPipeline(seed) { conn, params ->
-                val gen = DataGenerator(params)
-                val naive = naiveAttribution(conn, gen.dates[1], gen.dates.last())
-                val optimized = optimizedAttribution(conn, gen.dates[1], gen.dates.last())
+            withPipeline(seed) { conn, _, calendar ->
+                val naive = naiveAttribution(conn, calendar[1], calendar.last())
+                val optimized = optimizedAttribution(conn, calendar[1], calendar.last())
                 assertEquals(optimized.size, naive.size)
                 for ((n, o) in naive.zip(optimized)) {
                     assertEquals(o.portfolioId, n.portfolioId)
                     assertEquals(o.sector, n.sector)
-                    assertTrue(abs(o.avgPortfolioWeight - n.avgPortfolioWeight) < 1e-9)
-                    assertTrue(abs(o.avgBenchmarkWeight - n.avgBenchmarkWeight) < 1e-9)
-                    assertTrue(abs(o.allocation - n.allocation) < 1e-9, "allocation differs: $n vs $o")
-                    assertTrue(abs(o.selection - n.selection) < 1e-9, "selection differs: $n vs $o")
-                    assertTrue(abs(o.interaction - n.interaction) < 1e-9, "interaction differs: $n vs $o")
+                    assertEquals(o.avgPortfolioWeight, n.avgPortfolioWeight, 1e-9)
+                    assertEquals(o.avgBenchmarkWeight, n.avgBenchmarkWeight, 1e-9)
+                    assertEquals(o.allocation, n.allocation, 1e-9, "allocation differs in ${o.sector}")
+                    assertEquals(o.selection, n.selection, 1e-9, "selection differs in ${o.sector}")
+                    assertEquals(o.interaction, n.interaction, 1e-9, "interaction differs in ${o.sector}")
                 }
             }
         }
@@ -100,7 +102,7 @@ class PipelinePropertyTest {
 
     @Test
     fun `generated benchmark weights sum to one every day`() {
-        withPipeline(42L) { conn, _ ->
+        withPipeline(42L) { conn, _, _ ->
             conn.createStatement().use { st ->
                 st.executeQuery("SELECT date, sum(weight) FROM benchmark_weights GROUP BY date").use { rs ->
                     while (rs.next()) assertEquals(1.0, rs.getDouble(2), 1e-9)

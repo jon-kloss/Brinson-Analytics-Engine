@@ -1,10 +1,10 @@
 package engine
 
-import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class InvariantTest {
 
@@ -15,11 +15,13 @@ class InvariantTest {
             val sectorCount = rng.nextInt(2, 12)
             val wpRaw = DoubleArray(sectorCount) { rng.nextDouble(0.01, 1.0) }
             val wbRaw = DoubleArray(sectorCount) { rng.nextDouble(0.01, 1.0) }
+            val wpSum = wpRaw.sum()
+            val wbSum = wbRaw.sum()
             val sectors = (0 until sectorCount).map { i ->
                 SectorPeriod(
                     sector = "S$i",
-                    portfolioWeight = wpRaw[i] / wpRaw.sum(),
-                    benchmarkWeight = wbRaw[i] / wbRaw.sum(),
+                    portfolioWeight = wpRaw[i] / wpSum,
+                    benchmarkWeight = wbRaw[i] / wbSum,
                     portfolioReturn = rng.nextDouble(-0.1, 0.1),
                     benchmarkReturn = rng.nextDouble(-0.1, 0.1),
                 )
@@ -59,8 +61,10 @@ class InvariantTest {
 
     @Test
     fun `annualization applies only at one year or beyond`() {
-        assertTrue(annualizedOrNull(0.10, 364) == null)
-        val twoYear = annualizedOrNull(0.21, 731)
-        assertTrue(twoYear != null && abs(twoYear - (Math.pow(1.21, 365.25 / 731.0) - 1.0)) < 1e-12)
+        assertNull(annualizedOrNull(0.10, 364))
+        // 365 is the boundary the implementation switches on — pin it explicitly.
+        assertNotNull(annualizedOrNull(0.10, 365))
+        val twoYear = assertNotNull(annualizedOrNull(0.21, 731))
+        assertEquals(Math.pow(1.21, 365.25 / 731.0) - 1.0, twoYear, 1e-12)
     }
 }

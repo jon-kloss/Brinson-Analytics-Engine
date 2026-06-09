@@ -31,6 +31,21 @@ data class GenParams(
 }
 
 /**
+ * The weekday calendar used by the generator: index 0 is the inception snapshot date,
+ * indices 1..tradingDays are return days. Pure function of its arguments — callers that
+ * only need the dates (tests, range defaults) should use this instead of constructing a
+ * DataGenerator, whose initialization runs the full market simulation.
+ */
+fun tradingCalendar(startDate: LocalDate, tradingDays: Int): List<LocalDate> =
+    generateSequence(startDate) { d ->
+        var next = d.plusDays(1)
+        while (next.dayOfWeek == DayOfWeek.SATURDAY || next.dayOfWeek == DayOfWeek.SUNDAY) {
+            next = next.plusDays(1)
+        }
+        next
+    }.take(tradingDays + 1).toList()
+
+/**
  * Simulates the market once (prices via geometric Brownian motion with sector-correlated
  * drift, occasional dividends, a buy-and-hold benchmark index), then simulates each
  * portfolio's holdings through time and appends everything straight into DuckDB tables.
@@ -48,13 +63,7 @@ class DataGenerator(private val params: GenParams) {
     private val n = params.securities
     private val days = params.tradingDays
 
-    val dates: List<LocalDate> = generateSequence(params.startDate) { d ->
-        var next = d.plusDays(1)
-        while (next.dayOfWeek == DayOfWeek.SATURDAY || next.dayOfWeek == DayOfWeek.SUNDAY) {
-            next = next.plusDays(1)
-        }
-        next
-    }.take(days + 1).toList()
+    val dates: List<LocalDate> = tradingCalendar(params.startDate, days)
 
     private val sectorOf = IntArray(n) { it % GICS_SECTORS.size }
     private val sectorDailyDrift = DoubleArray(GICS_SECTORS.size) { rng.nextDouble(0.02, 0.14) / 252.0 }
@@ -152,6 +161,12 @@ class DataGenerator(private val params: GenParams) {
                 CREATE OR REPLACE TABLE positions_daily (
                     date DATE NOT NULL, portfolio_id INTEGER NOT NULL, security_id INTEGER NOT NULL,
                     quantity DOUBLE NOT NULL, price DOUBLE NOT NULL, market_value DOUBLE NOT NULL);
+                -- amount = signed cash impact on the portfolio's implicit cash account:
+                --   CASHFLOW: the external flow (+contribution / -withdrawal); quantity 0
+                --   DIVIDEND: cash received (+); quantity = shares added by reinvestment
+                --   SELL:     proceeds (+);     quantity = -shares sold
+                --   BUY:      cash spent (-);   quantity = +shares bought
+                -- Only CASHFLOW rows are external flows; the TWR engine reads only those.
                 CREATE OR REPLACE TABLE transactions (
                     date DATE NOT NULL, portfolio_id INTEGER NOT NULL, security_id INTEGER,
                     type VARCHAR NOT NULL, quantity DOUBLE NOT NULL, amount DOUBLE NOT NULL);
