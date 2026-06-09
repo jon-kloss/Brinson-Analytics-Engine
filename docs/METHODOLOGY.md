@@ -94,13 +94,50 @@ this by giving the benchmark a nonzero weight in every security in the universe.
 Σ_i (A_i + S_i + I_i) = rp_total - rb_total
 ```
 
-### Multi-period reporting
+### Multi-period linking (Cariño)
 
-For date ranges, the engine computes attribution per day and reports the **arithmetic sum** of
-daily effects per sector. The per-day invariant holds exactly; the summed effects equal the sum
-of daily active returns, which is *not* the geometrically compounded active return. Geometric
-linking of attribution effects (Cariño / Menchero smoothing) is deliberately out of scope —
-see Future Work in the README.
+Attribution is computed per day; daily effects cannot simply be added across days, because
+returns compound geometrically while effects are arithmetic decompositions. The report
+therefore applies **Cariño log-linking**. With daily attribution returns `rp_t = Σ wp_i rp_i`
+and `rb_t` (the benchmark total), and cumulative returns `R_p = ∏(1+rp_t) − 1`,
+`R_b = ∏(1+rb_t) − 1`, define
+
+```
+k(a, b) = (ln(1+a) - ln(1+b)) / (a - b),   with limit 1/(1+a) when a = b
+k_t = k(rp_t, rb_t)        per-day coefficient
+k   = k(R_p,  R_b)         full-period coefficient
+```
+
+Each day's effects are scaled by `k_t / k`. Because
+`Σ k_t (rp_t − rb_t) = Σ [ln(1+rp_t) − ln(1+rb_t)] = ln(1+R_p) − ln(1+R_b) = k (R_p − R_b)`,
+the scaled effects sum **exactly** to the geometric active return `R_p − R_b` (enforced in
+tests to 1e-12 at the engine level and 1e-10 through the pipeline).
+
+**Worked example** (reproduced by `CarinoTest`): two periods with
+`(rp, rb) = (10%, 5%)` then `(−2%, +1%)`.
+
+```
+R_p = 1.10 · 0.98 − 1 = 0.0780      R_b = 1.05 · 1.01 − 1 = 0.0605
+R_p − R_b = 0.0175
+
+k_1 = (ln 1.10 − ln 1.05) / 0.05    = 0.930400312698
+k_2 = (ln 0.98 − ln 1.01) / (−0.03) = 1.005101272356
+k   = (ln 1.078 − ln 1.0605) / 0.0175 = 0.935255855097
+
+factor_1 = k_1/k = 0.994808327183 → scaled active  +0.049740416359
+factor_2 = k_2/k = 1.074680545305 → scaled active  −0.032240416359
+                                      sum          = 0.017500000000 ✓ = R_p − R_b
+```
+
+Two notes. First, the reconciliation target is the *difference* of cumulative returns
+(`R_p − R_b`), the standard Cariño convention — not the ratio form `(1+R_p)/(1+R_b) − 1`.
+Second, `rp_t` here is the weight-based attribution return (Conventions §4); it equals the
+TWR sub-period return exactly under the pro-rata flow assumption, so in generated data the
+linked totals reconcile to the TWR active return as well.
+
+The **benchmark query paths** (`bench`, the naive/optimized equivalence) still aggregate
+raw arithmetic sums of daily effects — linking is a per-portfolio report-layer concern,
+deliberately kept out of the timed aggregation workload.
 
 ## Contribution
 

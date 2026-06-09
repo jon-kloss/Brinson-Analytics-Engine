@@ -2,6 +2,7 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.int
@@ -99,13 +100,18 @@ class Bench : CliktCommand(name = "bench") {
     private val db by option().default("data/brinson.duckdb")
     private val parquet by option(help = "If set, also benchmark SQL directly over Parquet").default("data/parquet")
     private val runs by option().int().default(5)
+    private val explain by option(help = "Print EXPLAIN ANALYZE for the optimized query instead of timing").flag()
 
     override fun run() {
-        val parquetDir = Path.of(parquet).takeIf { it.toFile().isDirectory }
-        if (parquetDir == null) {
-            echo("note: Parquet directory '$parquet' not found — skipping the Parquet-direct variant")
-        }
         openDatabase(Path.of(db)).use { conn ->
+            if (explain) {
+                report.printQueryPlan(conn, ::echo)
+                return
+            }
+            val parquetDir = Path.of(parquet).takeIf { it.toFile().isDirectory }
+            if (parquetDir == null) {
+                echo("note: Parquet directory '$parquet' not found — skipping the Parquet-direct variant")
+            }
             runBench(conn, parquetDir, runs, ::echo)
         }
     }

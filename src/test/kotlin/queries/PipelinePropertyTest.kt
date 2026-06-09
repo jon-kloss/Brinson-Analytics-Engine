@@ -101,6 +101,22 @@ class PipelinePropertyTest {
     }
 
     @Test
+    fun `Carino-linked report effects reconcile to the geometric active return`() {
+        withPipeline(42L) { conn, params, calendar ->
+            for (pf in 1..params.portfolios) {
+                val daily = optimizedAttributionDaily(conn, calendar[1], calendar.last(), portfolioFilter = pf)
+                    .groupBy { it.date }.toSortedMap().values
+                val periods = daily.map { rows ->
+                    engine.PeriodReturns(rows.sumOf { it.wp * it.rp }, rows.first().rbTotal)
+                }
+                val linked = report.carinoLinkedAttribution(conn, calendar[1], calendar.last(), pf)
+                val totalLinked = linked.sumOf { it.total }
+                assertEquals(engine.cumulativeActiveReturn(periods), totalLinked, 1e-10, "pf=$pf")
+            }
+        }
+    }
+
+    @Test
     fun `generated benchmark weights sum to one every day`() {
         withPipeline(42L) { conn, _, _ ->
             conn.createStatement().use { st ->

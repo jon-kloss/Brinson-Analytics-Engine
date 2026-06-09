@@ -1,15 +1,18 @@
 package report
 
+import engine.PeriodReturns
 import engine.annualizedOrNull
+import engine.carinoFactors
 import engine.linkGeometrically
 import engine.subPeriodReturn
 import java.sql.Connection
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import queries.AttributionRow
 import queries.dailyValuations
 import queries.benchmarkDailyReturns
-import queries.optimizedAttribution
+import queries.optimizedAttributionDaily
 import queries.securityContributions
 
 /** Locale-stable formatting: report output must not vary with the host's default locale. */
@@ -17,6 +20,45 @@ internal fun String.fmt(vararg args: Any?): String = String.format(Locale.ROOT, 
 
 private fun pct(x: Double): String = "%+.2f%%".fmt(x * 100)
 private fun bps(x: Double): String = "%+7.1f".fmt(x * 10_000)
+
+/**
+ * Per-sector Brinson-Fachler effects, Carino-linked across days so they sum to the
+ * geometric active return of the attribution return series (METHODOLOGY.md,
+ * "Multi-period linking"). Weights are reported as simple daily averages.
+ */
+fun carinoLinkedAttribution(
+    conn: Connection,
+    from: LocalDate,
+    to: LocalDate,
+    portfolioId: Int,
+): List<AttributionRow> {
+    val byDate = optimizedAttributionDaily(conn, from, to, portfolioFilter = portfolioId)
+        .groupBy { it.date }
+        .toSortedMap()
+    val factors = carinoFactors(
+        byDate.values.map { rows ->
+            PeriodReturns(rows.sumOf { it.wp * it.rp }, rows.first().rbTotal)
+        },
+    )
+
+    class Acc(var wp: Double = 0.0, var wb: Double = 0.0, var a: Double = 0.0, var s: Double = 0.0, var i: Double = 0.0)
+
+    val bySector = LinkedHashMap<String, Acc>()
+    byDate.values.forEachIndexed { t, rows ->
+        for (r in rows) {
+            val acc = bySector.getOrPut(r.sector) { Acc() }
+            acc.wp += r.wp
+            acc.wb += r.wb
+            acc.a += factors[t] * r.allocation
+            acc.s += factors[t] * r.selection
+            acc.i += factors[t] * r.interaction
+        }
+    }
+    val days = byDate.size
+    return bySector.map { (sector, acc) ->
+        AttributionRow(portfolioId, sector, acc.wp / days, acc.wb / days, acc.a, acc.s, acc.i)
+    }.sortedBy { it.sector }
+}
 
 /** The rendered report plus the data it was built from, so callers (e.g. the HTML
  *  waterfall) can reuse the attribution rows instead of re-running the query. */
@@ -67,8 +109,8 @@ fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDa
     ))
     sb.appendLine()
 
-    val rows = optimizedAttribution(conn, valuations.first().date, to, portfolioFilter = portfolioId)
-    sb.appendLine("Brinson-Fachler attribution by sector  (sum of daily effects, in bps)")
+    val rows = carinoLinkedAttribution(conn, valuations.first().date, to, portfolioId)
+    sb.appendLine("Brinson-Fachler attribution by sector  (Carino-linked daily effects, in bps)")
     sb.appendLine("-".repeat(78))
     sb.appendLine(
         "  %-24s %6s %6s %9s %9s %9s %9s".fmt(
@@ -91,7 +133,7 @@ fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDa
             bps(rows.sumOf { it.interaction }), bps(rows.sumOf { it.total }),
         ),
     )
-    sb.appendLine("  (totals equal the arithmetic sum of daily active returns; see METHODOLOGY.md)")
+    sb.appendLine("  (Carino-linked: totals reconcile to the geometric active return; METHODOLOGY.md)")
     sb.appendLine()
 
     val contribs = securityContributions(conn, portfolioId, valuations.first().date, to)

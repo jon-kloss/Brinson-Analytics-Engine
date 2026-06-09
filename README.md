@@ -1,5 +1,7 @@
 # brinson — Portfolio Performance & Attribution Engine
 
+![CI](https://github.com/jon-kloss/Brinson-Analytics-Engine/actions/workflows/ci.yml/badge.svg)
+
 A compact analytics engine that computes time-weighted returns and Brinson-Fachler
 performance attribution for equity portfolios, built in Kotlin on embedded DuckDB. A
 synthetic-data ETL pipeline (generator → Parquet → DuckDB) feeds a star-schema fact table,
@@ -24,8 +26,11 @@ into three effects. **Allocation** — did overweighting/underweighting whole se
 `(wp_i − wb_i)(rb_i − rb)`. **Selection** — within each sector, did the manager pick better
 securities than the index? `wb_i(rp_i − rb_i)`. **Interaction** — the cross term
 `(wp_i − wb_i)(rp_i − rb_i)`. The three effects sum *exactly* to the active return — that
-identity is enforced in the test suite to 1e-10. All formulas, conventions, and a fully
-hand-worked example live in [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
+identity is enforced in the test suite to 1e-10. Across multiple days the report compounds
+effects with **Cariño log-linking**, so multi-period totals reconcile exactly to the
+geometric active return rather than drifting the way naive arithmetic sums do. All formulas,
+conventions, and fully hand-worked examples live in
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md).
 
 ## Architecture
 
@@ -73,6 +78,26 @@ Honest framing: the naive path is not a strawman — the math and even the scan 
 identical; it pays for moving 10.4M rows across the JDBC boundary and aggregating them
 row-at-a-time on the JVM heap. The optimized path demonstrates the actual engineering
 lesson: push set-based math into the columnar engine and move results, not rows.
+The annotated `EXPLAIN ANALYZE` plan is in [docs/QUERY_PLAN.md](docs/QUERY_PLAN.md)
+(`brinson bench --explain` regenerates it).
+
+### Scaling
+
+Same benchmark across data sizes (`--scale` 0.1 → 2.0, median of 3 runs after warmup;
+at scale 2.0 holdings saturate against the 500-security universe):
+
+| Rows | Naive | Optimized | Speedup |
+|---|---|---|---|
+| 1,059,995 | 1,389 ms | 225 ms | 6.2x |
+| 2,610,850 | 2,858 ms | 416 ms | 6.9x |
+| 5,244,930 | 5,023 ms | 775 ms | 6.5x |
+| 10,377,750 | 8,812 ms | 1,304 ms | 6.8x |
+| 12,123,535 | 10,080 ms | 1,449 ms | 7.0x |
+
+Both paths scale roughly linearly in row count — the difference is a constant factor of
+~6-7x, which is the cost of moving rows across the JDBC boundary instead of aggregating
+them where they live. Put differently: the optimized path processes 12.1M rows in roughly
+the time the naive path needs for 1M.
 
 ## Sample report
 
@@ -85,23 +110,23 @@ Portfolio 007  |  2024-01-03 .. 2025-12-08  (504 trading days)
   TWR (benchmark):          +25.51%   (annualized +12.47%)
   Active return:             +7.67%   (geometric: +6.11%)
 
-Brinson-Fachler attribution by sector  (sum of daily effects, in bps)
+Brinson-Fachler attribution by sector  (Carino-linked daily effects, in bps)
 ------------------------------------------------------------------------------
   Sector                       wp     wb     Alloc    Select  Interact     Total
-  Real Estate               15.2%   6.5%     -17.5    +164.4    +211.7    +358.6
-  Energy                     5.2%  10.5%    +165.4     +85.1     -43.6    +206.9
-  Consumer Discretionary    11.3%   9.6%     +14.8     +90.1     +12.9    +117.8
-  Industrials                7.0%   7.3%      +6.4     +61.1      -4.5     +63.0
-  Utilities                  5.9%   7.3%     +28.7     +22.4      -5.9     +45.3
-  Health Care                9.6%   8.1%      +4.7     +33.5      +4.0     +42.2
-  Communication Services    13.2%   7.4%     -10.8     +20.3     +13.0     +22.5
-  Financials                 6.7%   7.5%      -8.4     +31.2      -4.7     +18.1
-  Materials                  8.0%  14.1%     -82.3     +65.5     -31.4     -48.2
-  Information Technology     9.6%   9.7%     -10.0     -65.4      -0.7     -76.1
-  Consumer Staples           8.2%  11.9%     -58.1    -146.9     +45.3    -159.7
+  Real Estate               15.2%   6.5%     -18.0    +212.5    +273.5    +467.9
+  Energy                     5.2%  10.5%    +213.1    +109.7     -56.2    +266.6
+  Consumer Discretionary    11.3%   9.6%     +19.3    +116.2     +16.7    +152.1
+  Industrials                7.0%   7.3%      +8.2     +79.5      -5.9     +81.9
+  Utilities                  5.9%   7.3%     +36.9     +29.2      -7.6     +58.5
+  Health Care                9.6%   8.1%      +5.6     +43.1      +5.1     +53.8
+  Communication Services    13.2%   7.4%     -16.0     +26.3     +16.8     +27.1
+  Financials                 6.7%   7.5%     -10.8     +40.5      -6.1     +23.5
+  Materials                  8.0%  14.1%    -104.8     +84.3     -40.4     -60.9
+  Information Technology     9.6%   9.7%     -12.9     -84.9      -0.9     -98.6
+  Consumer Staples           8.2%  11.9%     -74.3    -188.5     +58.1    -204.7
 ------------------------------------------------------------------------------
-  TOTAL                      100%   100%     +32.9    +361.5    +196.0    +590.3
-  (totals equal the arithmetic sum of daily active returns; see METHODOLOGY.md)
+  TOTAL                      100%   100%     +46.3    +467.9    +253.0    +767.2
+  (Carino-linked: totals reconcile to the geometric active return; METHODOLOGY.md)
 
 Top contributors (sum of daily w*r, in bps)
 ------------------------------------------------------------------------------
@@ -132,8 +157,6 @@ minute at defaults; the five ~7 s naive runs dominate.
 
 ## Future Work
 
-- **Multi-period attribution linking** (Cariño / Menchero smoothing) — daily effects are
-  currently reported as arithmetic sums with the caveat documented in METHODOLOGY.md
 - **Multi-currency** portfolios and currency-allocation effects
 - **ClickHouse / distributed scale** for fact tables beyond a single node
 - **AWS deployment** (S3 Parquet lake + scheduled attribution jobs)

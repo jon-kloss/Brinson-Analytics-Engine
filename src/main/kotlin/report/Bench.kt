@@ -48,6 +48,24 @@ fun maxAbsDiff(a: List<AttributionRow>, b: List<AttributionRow>): Double {
     return maxDiff
 }
 
+/** Print DuckDB's EXPLAIN ANALYZE for the optimized attribution query (full range). */
+fun printQueryPlan(conn: Connection, echo: (String) -> Unit) {
+    val (from, to) = conn.createStatement().use { st ->
+        st.executeQuery("SELECT min(date), max(date) FROM benchmark_returns").use { rs ->
+            rs.next()
+            rs.getDate(1).toLocalDate() to rs.getDate(2).toLocalDate()
+        }
+    }
+    conn.createStatement().use { st ->
+        st.executeQuery(
+            "EXPLAIN ANALYZE " + queries.attributionSql(from, to, perDay = false),
+        ).use { rs ->
+            val cols = rs.metaData.columnCount
+            while (rs.next()) for (c in 1..cols) rs.getString(c)?.let { echo(it) }
+        }
+    }
+}
+
 fun runBench(
     conn: Connection,
     parquetDir: Path?,
