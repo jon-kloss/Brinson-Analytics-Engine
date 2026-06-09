@@ -1,0 +1,7 @@
+.gradle/
+build/
+data/
+*.duckdb
+*.duckdb.wal
+.idea/
+*.iml
