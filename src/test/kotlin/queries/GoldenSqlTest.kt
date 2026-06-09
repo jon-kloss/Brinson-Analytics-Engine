@@ -6,6 +6,7 @@ import etl.openInMemory
 import java.sql.Connection
 import java.time.LocalDate
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -20,8 +21,14 @@ class GoldenSqlTest {
     private val day1: LocalDate = LocalDate.parse("2024-01-03")
     private val day3: LocalDate = LocalDate.parse("2024-01-05")
 
-    private val conn: Connection = openInMemory().also { c ->
-        c.createStatement().use { st ->
+    private lateinit var conn: Connection
+
+    @BeforeTest
+    fun setUp() {
+        // Symmetric with tearDown: a failure mid-DDL cannot leak a connection the
+        // way a field initializer would (AfterTest never runs if construction throws).
+        conn = openInMemory()
+        conn.createStatement().use { st ->
             st.execute(
                 """
                 CREATE TABLE securities AS FROM (VALUES
