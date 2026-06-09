@@ -14,8 +14,10 @@ import etl.openDatabase
 import etl.openInMemory
 import etl.rowCount
 import etl.writeParquet
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
+import report.buildHtmlReport
 import report.buildReport
 import report.runBench
 
@@ -65,6 +67,7 @@ class Report : CliktCommand(name = "report") {
     private val portfolio by option(help = "Portfolio id").int().default(7)
     private val from by option(help = "Start date (default: full history)")
     private val to by option(help = "End date (default: full history)")
+    private val html by option(help = "Also write an HTML waterfall chart to this path")
 
     override fun run() {
         openDatabase(Path.of(db)).use { conn ->
@@ -74,13 +77,20 @@ class Report : CliktCommand(name = "report") {
                     rs.getDate(1).toLocalDate() to rs.getDate(2).toLocalDate()
                 }
             }
-            echo(
-                buildReport(
-                    conn, portfolio,
-                    from?.let(LocalDate::parse) ?: minDate,
-                    to?.let(LocalDate::parse) ?: maxDate,
-                ),
-            )
+            val fromDate = from?.let(LocalDate::parse) ?: minDate
+            val toDate = to?.let(LocalDate::parse) ?: maxDate
+            // buildReport returns its attribution rows so the HTML chart reuses them
+            // instead of re-running the query.
+            val output = buildReport(conn, portfolio, fromDate, toDate)
+            echo(output.text)
+            html?.let { path ->
+                val target = Path.of(path).toAbsolutePath()
+                target.parent?.let(Files::createDirectories)
+                target.toFile().writeText(
+                    buildHtmlReport(output.portfolioName, output.from, output.to, output.attribution),
+                )
+                echo("HTML waterfall written to $path")
+            }
         }
     }
 }

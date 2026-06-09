@@ -18,7 +18,17 @@ internal fun String.fmt(vararg args: Any?): String = String.format(Locale.ROOT, 
 private fun pct(x: Double): String = "%+.2f%%".fmt(x * 100)
 private fun bps(x: Double): String = "%+7.1f".fmt(x * 10_000)
 
-fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDate): String {
+/** The rendered report plus the data it was built from, so callers (e.g. the HTML
+ *  waterfall) can reuse the attribution rows instead of re-running the query. */
+data class ReportOutput(
+    val text: String,
+    val portfolioName: String,
+    val from: LocalDate,
+    val to: LocalDate,
+    val attribution: List<queries.AttributionRow>,
+)
+
+fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDate): ReportOutput {
     val sb = StringBuilder()
 
     val valuations = dailyValuations(conn, portfolioId, from, to)
@@ -94,5 +104,5 @@ fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDa
     for (c in contribs.takeLast(3)) {
         sb.appendLine("  %-8s %-24s %9s".fmt(c.ticker, c.sector, bps(c.contribution)))
     }
-    return sb.toString()
+    return ReportOutput(sb.toString(), name, valuations.first().date, to, rows)
 }
