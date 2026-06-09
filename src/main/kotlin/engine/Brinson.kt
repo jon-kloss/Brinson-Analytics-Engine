@@ -2,8 +2,8 @@ package engine
 
 /**
  * Single-period sector-level inputs to Brinson-Fachler attribution.
- * Weights are prior-close market-value weights (METHODOLOGY.md, Conventions §4);
- * portfolio weights and benchmark weights must each sum to 1.
+ * Weights are prior-close market-value weights (METHODOLOGY.md, Conventions §4).
+ * Portfolio weights must sum to 1; benchmark weights are normalized internally.
  */
 data class SectorPeriod(
     val sector: String,
@@ -30,7 +30,10 @@ data class SectorEffects(
  * Invariant: sum(A_i + S_i + I_i) = rp_total - rb_total.
  */
 fun brinsonFachler(sectors: List<SectorPeriod>): List<SectorEffects> {
-    val rbTotal = sectors.sumOf { it.benchmarkWeight * it.benchmarkReturn }
+    // Normalized, matching the SQL path (bench_sector_tot): weights that do not sum to
+    // exactly 1 yield the correct benchmark mean instead of a silently skewed one.
+    val rbTotal = sectors.sumOf { it.benchmarkWeight * it.benchmarkReturn } /
+        sectors.sumOf { it.benchmarkWeight }
     return sectors.map { s ->
         SectorEffects(
             sector = s.sector,

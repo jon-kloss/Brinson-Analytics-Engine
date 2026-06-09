@@ -10,6 +10,10 @@ import java.time.LocalDate
  *
  * `positionsSource` is normally the positions_daily table but can be a
  * read_parquet(...) expression to scan the Parquet file directly.
+ *
+ * Values are interpolated as SQL literals. That is safe *only* because every input is
+ * typed before it reaches the string (LocalDate / Int); if you add a string-typed filter
+ * (ticker, sector, ...), switch to PreparedStatement binds — do not extend this pattern.
  */
 fun attributionSql(
     from: LocalDate,
@@ -48,6 +52,8 @@ fun attributionSql(
     -- Prior-close market value per holding = the attribution weight basis
     -- (METHODOLOGY.md Conventions §4). The lag runs over full history up to the
     -- period end so the first in-range day still sees its prior close.
+    -- TODO: short windows still pay a full-history scan; bound it by resolving the
+    -- previous trading day (max(date) < from) first and filtering date >= that.
     pos_lag AS (
         SELECT portfolio_id, security_id, date,
                lag(market_value) OVER (PARTITION BY portfolio_id, security_id ORDER BY date) AS basis
@@ -77,6 +83,9 @@ fun attributionSql(
         FROM benchmark_weights b
         JOIN securities s USING (security_id)
         JOIN sec_ret r ON r.security_id = b.security_id AND r.date = b.date
+        -- The join with sec_ret already restricts dates; this predicate states the
+        -- intent explicitly and lets the optimizer prune before the join.
+        WHERE b.date BETWEEN DATE '$from' AND DATE '$to'
         GROUP BY ALL
     ),
     bench_sector_tot AS (

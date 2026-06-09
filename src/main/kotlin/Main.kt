@@ -91,8 +91,12 @@ class Bench : CliktCommand(name = "bench") {
     private val runs by option().int().default(5)
 
     override fun run() {
+        val parquetDir = Path.of(parquet).takeIf { it.toFile().isDirectory }
+        if (parquetDir == null) {
+            echo("note: Parquet directory '$parquet' not found — skipping the Parquet-direct variant")
+        }
         openDatabase(Path.of(db)).use { conn ->
-            runBench(conn, Path.of(parquet).takeIf { it.toFile().isDirectory }, runs, ::echo)
+            runBench(conn, parquetDir, runs, ::echo)
         }
     }
 }

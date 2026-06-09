@@ -12,6 +12,10 @@ val TABLES = listOf(
 
 fun openInMemory(): Connection = DriverManager.getConnection("jdbc:duckdb:")
 
+/** Paths are spliced into COPY/read_parquet statements; escape quotes so a directory
+ *  containing `'` produces a clean error-free statement instead of broken SQL. */
+private fun sqlPath(path: Path): String = path.toString().replace("'", "''")
+
 fun openDatabase(dbPath: Path): Connection {
     Files.createDirectories(dbPath.toAbsolutePath().parent)
     return DriverManager.getConnection("jdbc:duckdb:$dbPath")
@@ -30,7 +34,7 @@ fun writeParquet(conn: Connection, dir: Path) {
                 table
             }
             st.execute(
-                "COPY $source TO '${dir.resolve("$table.parquet")}' (FORMAT PARQUET, COMPRESSION ZSTD)",
+                "COPY $source TO '${sqlPath(dir.resolve("$table.parquet"))}' (FORMAT PARQUET, COMPRESSION ZSTD)",
             )
         }
     }
@@ -41,7 +45,7 @@ fun loadFromParquet(conn: Connection, parquetDir: Path) {
     conn.createStatement().use { st ->
         for (table in TABLES) {
             st.execute(
-                "CREATE OR REPLACE TABLE $table AS SELECT * FROM read_parquet('${parquetDir.resolve("$table.parquet")}')",
+                "CREATE OR REPLACE TABLE $table AS SELECT * FROM read_parquet('${sqlPath(parquetDir.resolve("$table.parquet"))}')",
             )
         }
     }

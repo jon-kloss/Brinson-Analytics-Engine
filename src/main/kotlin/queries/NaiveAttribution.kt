@@ -8,6 +8,12 @@ import java.time.LocalDate
  * table over JDBC into the JVM and aggregate row-at-a-time in hash maps. This is the
  * honest "before" picture — the math is identical to the optimized SQL variant, the
  * difference is *where* the aggregation happens.
+ *
+ * Shared assumption with the SQL path: the weight basis is the holding's previous
+ * *snapshot* row, and `positions_daily` series are daily and gapless per
+ * (portfolio, security) — the generator guarantees this. Data with gaps (a holding sold
+ * to zero and re-entered without a row in between) would silently reach across the gap
+ * in both implementations.
  */
 fun naiveAttribution(
     conn: Connection,
@@ -139,8 +145,12 @@ fun naiveAttribution(
     }.sortedWith(compareBy({ it.portfolioId }, { it.sector }))
 }
 
-private fun dateSecKey(date: LocalDate, securityId: Int): Long =
-    date.toEpochDay() * 1_000_000L + securityId
+private fun dateSecKey(date: LocalDate, securityId: Int): Long {
+    // Bit-packed so the full non-negative Int id range is collision-free (a decimal
+    // multiplier would silently collide at security_id >= 1e6 and corrupt results).
+    require(securityId >= 0) { "negative security_id: $securityId" }
+    return (date.toEpochDay() shl 32) or securityId.toLong()
+}
 
 private fun fetchSectors(conn: Connection): Map<Int, String> =
     conn.createStatement().use { st ->
