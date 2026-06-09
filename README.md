@@ -6,7 +6,7 @@ synthetic-data ETL pipeline (generator → Parquet → DuckDB) feeds a star-sche
 and the same attribution math is implemented twice — once as naive JVM-side aggregation,
 once as single-pass columnar SQL — to make the optimization win measurable:
 **Brinson-Fachler attribution over 10.4M position rows runs in 1.33 s in DuckDB —
-5.0x faster than the naive JVM aggregation, with results identical to 3.5e-17.**
+5.0x faster than the naive JVM aggregation, with both paths agreeing to within 3.5e-17.**
 
 ## The finance, in two paragraphs
 
@@ -31,12 +31,12 @@ hand-worked example live in [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
 
 ```mermaid
 flowchart LR
-    A["datagen\nGBM prices, dividends,\ncash flows · seed 42"] -->|DuckDB appender| B[("in-memory\nDuckDB")]
-    B -->|COPY ... TO| C["Parquet\n(ZSTD)"]
-    C -->|read_parquet| D[("brinson.duckdb\nstar schema")]
-    D --> E["queries\nnaive JVM vs\nsingle-pass SQL"]
-    E --> F["engine\nTWR · Brinson-Fachler\n· contribution"]
-    F --> G["report\nCLI attribution report\n+ bench table"]
+    A["datagen<br/>GBM prices, dividends,<br/>cash flows · seed 42"] -->|DuckDB appender| B[("in-memory<br/>DuckDB")]
+    B -->|COPY ... TO| C["Parquet<br/>(ZSTD)"]
+    C -->|read_parquet| D[("brinson.duckdb<br/>star schema")]
+    D --> E["queries<br/>naive JVM vs<br/>single-pass SQL"]
+    E --> F["engine<br/>TWR · Brinson-Fachler<br/>· contribution"]
+    F --> G["report<br/>CLI attribution report<br/>+ bench table"]
 ```
 
 The schema is a small star: `positions_daily` (the 10M+ row fact table) plus `securities`,
@@ -66,7 +66,7 @@ median of 5 runs after 1 warmup, produced by `brinson bench`:
 | optimized (SQL directly over Parquet) | 1,432 ms (4.7x faster) | 1480, 1409, 1403, 1454, 1432 |
 
 Hardware: 4-core Linux amd64 container, JVM max heap 4 GB (DuckDB works off-heap).
-Before timing, the harness asserts both paths return identical effects
+Before timing, the harness asserts both paths return the same effects
 (max abs difference observed: 3.5e-17).
 
 Honest framing: the naive path is not a strawman — the math and even the scan order are
@@ -125,6 +125,10 @@ build/install/brinson/bin/brinson report --portfolio 7   # or: bench
 ```
 
 (`./gradlew test` runs the golden, invariant, property, and equivalence suites.)
+
+Full-scale `generate` simulates into an in-memory DuckDB before the Parquet dump — budget
+~4 GB free RAM, or pass `--scale 0.1` for a laptop-friendly run. `bench` takes about a
+minute at defaults; the five ~7 s naive runs dominate.
 
 ## Built with Claude Code
 

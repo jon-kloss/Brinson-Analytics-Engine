@@ -14,8 +14,10 @@ import etl.openDatabase
 import etl.openInMemory
 import etl.rowCount
 import etl.writeParquet
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
+import report.buildHtmlReport
 import report.buildReport
 import report.runBench
 
@@ -77,11 +79,15 @@ class Report : CliktCommand(name = "report") {
             }
             val fromDate = from?.let(LocalDate::parse) ?: minDate
             val toDate = to?.let(LocalDate::parse) ?: maxDate
-            echo(buildReport(conn, portfolio, fromDate, toDate))
+            // buildReport returns its attribution rows so the HTML chart reuses them
+            // instead of re-running the query.
+            val output = buildReport(conn, portfolio, fromDate, toDate)
+            echo(output.text)
             html?.let { path ->
-                val rows = queries.optimizedAttribution(conn, fromDate, toDate, portfolioFilter = portfolio)
-                Path.of(path).toFile().writeText(
-                    report.buildHtmlReport("Portfolio %03d".format(portfolio), fromDate, toDate, rows),
+                val target = Path.of(path).toAbsolutePath()
+                target.parent?.let(Files::createDirectories)
+                target.toFile().writeText(
+                    buildHtmlReport(output.portfolioName, output.from, output.to, output.attribution),
                 )
                 echo("HTML waterfall written to $path")
             }
