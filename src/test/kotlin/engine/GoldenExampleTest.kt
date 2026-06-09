@@ -23,7 +23,8 @@ class GoldenExampleTest {
     fun `linked TWR equals 3537 over 101200`() {
         val twr = linkGeometrically(listOf(0.01, 90.0 / 5060.0, 35.0 / 5150.0))
         assertEquals(3537.0 / 101200.0, twr, tolerance)
-        assertEquals(0.0349505928853754, twr, 1e-10)
+        // Pins the decimal literal printed in METHODOLOGY.md, not just the fraction.
+        assertEquals(0.0349505928853754, twr, tolerance)
     }
 
     @Test
