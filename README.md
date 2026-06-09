@@ -130,10 +130,6 @@ Full-scale `generate` simulates into an in-memory DuckDB before the Parquet dump
 ~4 GB free RAM, or pass `--scale 0.1` for a laptop-friendly run. `bench` takes about a
 minute at defaults; the five ~7 s naive runs dominate.
 
-## Built with Claude Code
-
-<!-- TODO: Jon fills in workflow narrative -->
-
 ## Future Work
 
 - **Multi-period attribution linking** (Cariño / Menchero smoothing) — daily effects are
