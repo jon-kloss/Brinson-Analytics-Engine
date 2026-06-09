@@ -2,14 +2,18 @@ package report
 
 import engine.PeriodReturns
 import engine.annualizedOrNull
+import engine.annualizedTrackingError
 import engine.carinoFactors
+import engine.informationRatio
 import engine.linkGeometrically
+import engine.maxDrawdown
 import engine.subPeriodReturn
 import java.sql.Connection
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import queries.AttributionRow
+import queries.DailySectorRow
 import queries.dailyValuations
 import queries.benchmarkDailyReturns
 import queries.optimizedAttributionDaily
@@ -39,8 +43,20 @@ fun carinoLinkedAttribution(
     val byDate = optimizedAttributionDaily(conn, from, to, portfolioFilter = portfolioId)
         .groupBy { it.date }
         .toSortedMap()
+    return linkDailyRows(byDate.values, portfolioId)
+}
+
+/**
+ * Cariño-links pre-grouped daily sector rows (one portfolio, sorted by date).
+ * Shared by the report and the dashboard builder, which fetches all portfolios
+ * in one query and links each in memory.
+ */
+fun linkDailyRows(
+    byDate: Collection<List<DailySectorRow>>,
+    portfolioId: Int,
+): List<AttributionRow> {
     val factors = carinoFactors(
-        byDate.values.map { rows ->
+        byDate.map { rows ->
             // rb_total is constant per date by construction (one benchmark mean per
             // day), so reading it off the first row is safe.
             PeriodReturns(rows.sumOf { it.wp * it.rp }, rows.first().rbTotal)
@@ -50,7 +66,7 @@ fun carinoLinkedAttribution(
     class Acc(var wp: Double = 0.0, var wb: Double = 0.0, var a: Double = 0.0, var s: Double = 0.0, var i: Double = 0.0)
 
     val bySector = LinkedHashMap<String, Acc>()
-    byDate.values.forEachIndexed { t, rows ->
+    byDate.forEachIndexed { t, rows ->
         for (r in rows) {
             val acc = bySector.getOrPut(r.sector) { Acc() }
             acc.wp += r.wp
@@ -73,7 +89,7 @@ data class ReportOutput(
     val portfolioName: String,
     val from: LocalDate,
     val to: LocalDate,
-    val attribution: List<queries.AttributionRow>,
+    val attribution: List<AttributionRow>,
 )
 
 fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDate): ReportOutput {
@@ -113,6 +129,14 @@ fun buildReport(conn: Connection, portfolioId: Int, from: LocalDate, to: LocalDa
     sb.appendLine("  %-22s %10s   (geometric: %s)".fmt(
         "Active return:", pct(twr - benchTwr), pct((1 + twr) / (1 + benchTwr) - 1),
     ))
+    val dailyActive = portReturns.zip(benchReturns) { p, b -> p - b }
+    sb.appendLine(
+        "  %-22s %10s   (IR: %s,  max drawdown: %s)".fmt(
+            "Tracking error (ann):", pct(annualizedTrackingError(dailyActive)),
+            informationRatio(dailyActive)?.let { "%.2f".fmt(it) } ?: "n/a",
+            pct(maxDrawdown(portReturns)),
+        ),
+    )
     sb.appendLine()
 
     val rows = carinoLinkedAttribution(conn, valuations.first().date, to, portfolioId)
