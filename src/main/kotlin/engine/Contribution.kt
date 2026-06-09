@@ -7,4 +7,6 @@ data class HoldingPeriod(val id: String, val weight: Double, val periodReturn: D
 fun contribution(holding: HoldingPeriod): Double = holding.weight * holding.periodReturn
 
 fun contributions(holdings: List<HoldingPeriod>): Map<String, Double> =
-    holdings.associate { it.id to contribution(it) }
+    // Aggregate duplicate ids rather than associate-overwriting them, which would silently
+    // drop a contribution and break sum(c_i) = r_portfolio.
+    holdings.groupingBy { it.id }.fold(0.0) { acc, h -> acc + contribution(h) }
