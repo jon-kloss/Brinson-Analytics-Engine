@@ -65,6 +65,7 @@ class Report : CliktCommand(name = "report") {
     private val portfolio by option(help = "Portfolio id").int().default(7)
     private val from by option(help = "Start date (default: full history)")
     private val to by option(help = "End date (default: full history)")
+    private val html by option(help = "Also write an HTML waterfall chart to this path")
 
     override fun run() {
         openDatabase(Path.of(db)).use { conn ->
@@ -74,13 +75,16 @@ class Report : CliktCommand(name = "report") {
                     rs.getDate(1).toLocalDate() to rs.getDate(2).toLocalDate()
                 }
             }
-            echo(
-                buildReport(
-                    conn, portfolio,
-                    from?.let(LocalDate::parse) ?: minDate,
-                    to?.let(LocalDate::parse) ?: maxDate,
-                ),
-            )
+            val fromDate = from?.let(LocalDate::parse) ?: minDate
+            val toDate = to?.let(LocalDate::parse) ?: maxDate
+            echo(buildReport(conn, portfolio, fromDate, toDate))
+            html?.let { path ->
+                val rows = queries.optimizedAttribution(conn, fromDate, toDate, portfolioFilter = portfolio)
+                Path.of(path).toFile().writeText(
+                    report.buildHtmlReport("Portfolio %03d".format(portfolio), fromDate, toDate, rows),
+                )
+                echo("HTML waterfall written to $path")
+            }
         }
     }
 }
