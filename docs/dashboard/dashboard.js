@@ -337,11 +337,17 @@ window.BrinsonDashboard = function (mount, opts) {
     var tension = state.variant === "studio" ? 0.28 : 0;
     var lw = state.lineWeight != null ? state.lineWeight : (state.variant === "desk" ? 1.75 : (state.variant === "ledger" ? 2.25 : 2.5));
     function area(hex, a) { return hexA(hex.startsWith("#") ? hex : "#1f97a6", a); }
+    // Diverging fill: green above the zero line, red below. On the return lens,
+    // below zero = worth less than at inception; on the active lens, below zero =
+    // trailing the benchmark.
+    var divergingFill = fillStudio
+      ? { target: "origin", above: area(accent, 0.12), below: area(down, 0.16) }
+      : false;
     var datasets;
     if (state.view === "active") {
       datasets = [{ label: "Active", data: model.cp.map(function (x, i) { return 100 * (x - model.cb[i]); }),
-        borderColor: accent, backgroundColor: fillStudio ? area(accent, 0.12) : "transparent",
-        fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension }];
+        borderColor: accent, backgroundColor: area(accent, 0.12),
+        fill: divergingFill, pointRadius: 0, borderWidth: lw, tension: tension }];
     } else if (state.view === "drawdown") {
       datasets = [{ label: "Drawdown", data: ddSeries(model.rpS),
         borderColor: down, backgroundColor: area(down, 0.14),
@@ -352,7 +358,7 @@ window.BrinsonDashboard = function (mount, opts) {
         fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension, spanGaps: false }];
     } else {
       datasets = [
-        { label: "Portfolio", data: model.cp.map(function (x) { return 100 * x; }), borderColor: accent, backgroundColor: fillStudio ? area(accent, 0.12) : "transparent", fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension },
+        { label: "Portfolio", data: model.cp.map(function (x) { return 100 * x; }), borderColor: accent, backgroundColor: area(accent, 0.12), fill: divergingFill, pointRadius: 0, borderWidth: lw, tension: tension },
         { label: "Benchmark", data: model.cb.map(function (x) { return 100 * x; }), borderColor: muted, borderDash: state.variant === "ledger" ? [4, 3] : [], pointRadius: 0, borderWidth: state.variant === "desk" ? 1.25 : 1.5, tension: tension }
       ];
     }
