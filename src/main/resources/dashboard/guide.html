@@ -46,6 +46,9 @@
   .callout { border-left:3px solid var(--accent); background:var(--surface-2); border-radius:0 10px 10px 0;
     padding:12px 18px; margin:14px 0; font-size:.93rem; }
   .callout b:first-child { color:var(--accent-deep); }
+  .eli5 { border-left:3px solid #C98A3C; background:#fdf8ef; border-radius:0 10px 10px 0;
+    padding:12px 18px; margin:14px 0; font-size:.95rem; }
+  .eli5 b:first-child { color:#9a6a25; text-transform:uppercase; font-size:.72rem; letter-spacing:.07em; }
   .qa dt { font-weight:600; margin-top:18px; color:var(--ink-soft); }
   .qa dt::before { content:"Q  "; color:var(--accent-deep); font-family:var(--mono); font-weight:600; }
   .qa dd { margin:6px 0 0 0; padding-left:26px; }
@@ -77,6 +80,7 @@
 
 <nav class="toc">
   <b>Contents</b><br>
+  <a href="#plain">0 · The 60-second version</a>
   <a href="#system">1 · The system</a>
   <a href="#data">2 · The data</a>
   <a href="#twr">3 · TWR</a>
@@ -88,6 +92,27 @@
   <a href="#qa">9 · Interview Q&amp;A</a>
   <a href="#glossary">10 · Glossary</a>
 </nav>
+
+<section id="plain">
+  <h2>0 · The 60-second version</h2>
+  <p class="sub">the whole thing, no jargon — start here if the math sections feel heavy</p>
+  <p>Imagine you manage 50 baskets of stocks, and there's an "average basket" (the
+  <b>benchmark</b>) everyone is compared against. This dashboard answers five plain questions
+  about each basket:</p>
+  <table>
+    <tr><th>Question</th><th>The metric that answers it</th></tr>
+    <tr><td>How much did the basket grow — counting only investing skill, not clients adding
+      or removing money?</td><td><b>TWR</b> (Total return)</td></tr>
+    <tr><td>Did it beat the average basket, and by how much?</td><td><b>Active return</b></td></tr>
+    <tr><td><i>Where</i> did the beating come from — shopping in the right store aisles, or
+      picking the right items off the shelves?</td><td><b>Attribution</b> (the waterfall)</td></tr>
+    <tr><td>How wild a ride was it along the way?</td><td><b>Tracking error</b> &amp;
+      <b>Max drawdown</b></td></tr>
+    <tr><td>Was the outperformance worth the wildness?</td><td><b>Information ratio</b></td></tr>
+  </table>
+  <p class="small">Everything else on the dashboard — and in this guide — is detail in service
+  of those five questions.</p>
+</section>
 
 <section id="system">
   <h2>1 · The system in one view</h2>
@@ -161,6 +186,16 @@
   <pre>r_t = (MV_end − MV_begin − CF) / (MV_begin + CF)        <b>daily sub-period return</b>
 TWR = ∏(1 + r_t) − 1                                     <b>geometric linking</b>
 annualized = (1 + TWR)^(365.25 / calendar days) − 1      <b>only for periods ≥ 1 year</b></pre>
+  <div class="eli5"><b>In plain English:</b> imagine grading a chef. If a customer suddenly
+  orders ten times more food, the kitchen's total output jumps — but that says nothing about
+  cooking skill. TWR grades only the cooking. Each day we ask "what percent did the investments
+  themselves grow today?", carefully setting aside any money clients added or withdrew, and then
+  chain the daily answers together. The formula in words:
+  <span class="m">(what we ended with − what we started with − new money) ÷ (what we started
+  with + new money)</span> = today's skill score. "Geometric linking" just means multiplying
+  growth factors (1.01 × 1.02…) instead of adding percents — because day two's growth happens
+  on top of day one's bigger pile.</div>
+
   <h3>Worked example (the repo's golden test)</h3>
   <p>Four securities, three days, one +1,020 cash flow at the start of day 2:</p>
   <pre>day 1:  (4,040 − 4,000 − 0)     / 4,000           = <b>+1.0000%</b>
@@ -190,6 +225,17 @@ TWR  =  1.01 × 1.017787 × 1.006796 − 1 = 3537/101200 = <b>+3.4951%</b></pre>
   <b>Selection</b> rewards beating the sector's own benchmark return with your picks, sized by the
   benchmark weight. <b>Interaction</b> is what's left so the identity closes:</p>
   <pre><b>Σ (A + S + I) = active return        exactly — enforced in tests to 1e-10</b></pre>
+  <div class="eli5"><b>In plain English:</b> you beat the average basket — but <i>how</i>?
+  Only two kinds of decisions exist: <b>where you shopped</b> (which sectors you put more or
+  less money in than the benchmark) and <b>what you picked there</b> (which stocks).
+  <b>Allocation</b> is credit for shopping in the right aisles — putting extra money in sectors
+  that did better than the market overall. <b>Selection</b> is credit for grabbing the best
+  items off each shelf — your stocks beating that sector's average. <b>Interaction</b> is the
+  combo bonus: you bet <i>extra big</i> on an aisle <i>and</i> your picks there were winners —
+  the extra size amplified the good picking, and that amplification belongs to neither effect
+  alone. The magic property: add up all three across all sectors and you get back <i>exactly</i>
+  your total beat. Nothing is lost, nothing is double-counted.</div>
+
   <h3>Worked example (golden test, day 1)</h3>
   <p>Two sectors. Portfolio holds 50/50; benchmark holds Tech 60 / Energy 40.
   Tech returns 0% in the portfolio but +2.5% in the benchmark; Energy +2% in both.
@@ -221,6 +267,15 @@ TWR  =  1.01 × 1.017787 × 1.006796 − 1 = 3537/101200 = <b>+3.4951%</b></pre>
 k_t = k(rp_t, rb_t)      per-day        k = k(R_p, R_b)      full-period
 scaled effect = effect × <b>k_t / k</b>
 ⇒  Σ_t Σ_i scaled effects = <b>R_p − R_b</b>        the geometric active return, exactly</pre>
+  <div class="eli5"><b>In plain English:</b> daily scores don't simply add up over two years,
+  because money compounds — earning 1% on December's bigger pile is worth more than 1% on
+  January's. So if you naively add 504 daily attribution scores, the total comes out wrong
+  (here, off by about 1.8 percentage points). Cariño's fix: give each day a small
+  <i>exchange rate</i> (the factor k<sub>t</sub>/k) that converts its daily-sized score into
+  whole-period-sized score, chosen so that after conversion everything adds up to exactly the
+  true two-year outperformance. Like converting expenses from different currencies before
+  totaling a trip budget.</div>
+
   <h3>Worked example</h3>
   <pre>periods: (rp, rb) = (10%, 5%), then (−2%, +1%)     R_p = 7.80%, R_b = 6.05%
 k₁ = 0.930400312698     k₂ = 1.005101272356     k = 0.935255855097
@@ -239,6 +294,14 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
   <pre><b>Tracking error</b>  TE = stdev(daily active returns) × √252      annualized; "how far do I stray?"
 <b>Info ratio</b>      IR = mean(daily active) × 252 / TE           active return per unit of risk taken
 <b>Max drawdown</b>    worst peak-to-trough fall of the compounded portfolio path</pre>
+  <div class="eli5"><b>In plain English:</b> <b>Tracking error</b> — how bumpy is the gap
+  between you and the benchmark, day to day? Tiny TE means you hug the index; big TE means you
+  swing wildly around it. (The √252 just converts daily bumpiness into a per-year figure —
+  there are about 252 trading days in a year.) <b>Information ratio</b> — outperformance per
+  unit of bumpiness, like miles-per-gallon for managers: how much beat do you get for the risk
+  you take? <b>Max drawdown</b> — the worst "bought at the peak, watched it sink" experience:
+  the deepest the portfolio ever fell below its own best point so far.</div>
+
   <p>Rules of thumb: TE of 2–6% is a typical active equity mandate; IR above ~0.5 is good and
   above 1.0 is excellent over meaningful horizons. Max drawdown answers the client's most
   visceral question — “how much could I have been down?” IR on short ranges (the 3M button)
@@ -415,7 +478,9 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
   <h2>10 · Glossary</h2>
   <p class="sub">quick reference</p>
   <table>
-    <tr><td><b>bps</b></td><td>Basis points; 100 bps = 1%. Attribution effects are quoted in bps.</td></tr>
+    <tr><td><b>bps</b></td><td>Basis points; 100 bps = 1%. Finance counts in hundredths of a percent because active-management numbers are small.</td></tr>
+    <tr><td><b>Compounding</b></td><td>Growth on top of growth: +1% then +2% is 1.01 × 1.02 − 1 = +3.02%, not +3%.</td></tr>
+    <tr><td><b>Annualized</b></td><td>"At this pace, what would a full year look like?" — converts any period to a per-year figure.</td></tr>
     <tr><td><b>GICS</b></td><td>The standard 11-sector equity classification (Energy, Financials, Info Tech, …).</td></tr>
     <tr><td><b>Active return</b></td><td>Portfolio return minus benchmark return.</td></tr>
     <tr><td><b>TWR</b></td><td>Time-weighted return: flow-free sub-periods compounded geometrically.</td></tr>
