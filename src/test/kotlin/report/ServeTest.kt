@@ -52,19 +52,47 @@ class ServeTest {
             // /data.json aliases the live payload, so the static bootstrap path stays live.
             assertEquals(api.body(), get("/data.json").body())
 
-            // Granular endpoints: meta carries stubs, detail carries the series; the
-            // full document is exactly meta's shared prefix spliced with all details.
-            val meta = get("/api/meta")
-            assertEquals(200, meta.statusCode())
-            assertContains(meta.body(), "\"name\"")
-            assertFalse(meta.body().contains("\"rp\""), "meta must not carry portfolio series")
-            assertTrue(meta.body().length < api.body().length / 2, "meta should be much smaller than full")
+            // Access-pattern endpoints: each returns only what one UI stage consumes.
+            val list = get("/api/portfolios")
+            assertEquals(200, list.statusCode())
+            assertContains(list.body(), "\"name\"")
+            assertFalse(list.body().contains("\"rp\""), "picker list must not carry series")
+
+            val mkt = get("/api/market")
+            assertEquals(200, mkt.statusCode())
+            assertContains(mkt.body(), "\"rb\"")
+            assertContains(mkt.body(), "\"dates\"")
+            assertFalse(mkt.body().contains("\"portfolios\""), "market context is portfolio-free")
+
             val p1 = get("/api/portfolio/1")
             assertEquals(200, p1.statusCode())
             assertContains(p1.body(), "\"rp\"")
-            assertContains(api.body(), p1.body(), message = "full document must embed the portfolio detail")
+            assertContains(p1.body(), "\"attribution\"")
+            assertFalse(p1.body().contains("\"weights\""), "weights ship on their own endpoint")
+
+            val w1 = get("/api/portfolio/1/weights")
+            assertEquals(200, w1.statusCode())
+            assertContains(w1.body(), "\"weights\"")
+
+            // The full document is the pieces spliced back together — they cannot drift.
+            assertContains(api.body(), p1.body().dropLast(1), message = "full must embed detail core")
+            assertContains(api.body(), w1.body().removePrefix("{").removeSuffix("}"))
+
+            // gzip negotiation: same bytes after decompression.
+            val gz = client.send(
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port/api/portfolio/1"))
+                    .header("Accept-Encoding", "gzip").build(),
+                HttpResponse.BodyHandlers.ofByteArray(),
+            )
+            assertEquals("gzip", gz.headers().firstValue("Content-Encoding").get())
+            assertTrue(gz.body().size < p1.body().length / 2, "gzip should at least halve the payload")
+            val inflated = java.util.zip.GZIPInputStream(gz.body().inputStream()).readBytes()
+            assertEquals(p1.body(), String(inflated, Charsets.UTF_8))
+
             assertEquals(404, get("/api/portfolio/999").statusCode())
             assertEquals(404, get("/api/portfolio/x").statusCode())
+            assertEquals(404, get("/api/portfolio/1/nope").statusCode())
+            assertEquals(404, get("/api/meta").statusCode())
 
             val index = get("/")
             assertEquals(200, index.statusCode())

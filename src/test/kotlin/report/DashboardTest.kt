@@ -41,6 +41,9 @@ class DashboardTest {
         val saved = Locale.getDefault()
         val json = try {
             Locale.setDefault(Locale.GERMANY) // decimal commas must not leak into JSON
+            // Pin the formatting helper while a decimal-comma locale is the default;
+            // numbers are trimmed/variable-length now, so regex-hunting is unreliable.
+            assertEquals("0.1234568", "%.7f".fmt(0.12345678), "locale leaked into number formatting")
             smallScaleJson()
         } finally {
             Locale.setDefault(saved)
@@ -49,9 +52,6 @@ class DashboardTest {
             assertContains(json, key)
         }
         assertFalse(json.contains("NaN") || json.contains("Infinity"), "non-finite values leaked into JSON")
-        // A locale leak renders %.8f as e.g. "0,00123456": a comma followed by 8 digits.
-        // (Plain \d,\d would false-positive on ordinary array separators like "1,0.5".)
-        assertFalse(Regex("""\d,\d{8}""").containsMatchIn(json), "decimal commas leaked into JSON")
         assertEquals(json.count { it == '{' }, json.count { it == '}' }, "unbalanced braces")
         assertEquals(json.count { it == '[' }, json.count { it == ']' }, "unbalanced brackets")
         assertEquals(4, Regex("\"id\":").findAll(json).count())

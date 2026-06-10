@@ -339,6 +339,12 @@ window.BrinsonDashboard = function (mount, opts) {
     }).join("");
   }
   function renderWeights() {
+    var p = D.portfolios[state.pf];
+    if (!p.weights) { // matrix arrives after first paint in split-API mode
+      root.querySelector("[data-wtslegend]").innerHTML = "";
+      if (charts.wts) { charts.wts.destroy(); delete charts.wts; }
+      return;
+    }
     root.querySelector("[data-wtslegend]").innerHTML = wtsLegend();
     mk("wts", wtsCfg());
   }
@@ -400,7 +406,10 @@ window.BrinsonDashboard = function (mount, opts) {
     if (key === "perf") cfg = perfCfg(computeKpis());
     else if (key === "wf") { var rows = attributionRows(); cfg = wfCfg(rows); renderTable(rows, body.querySelector("[data-modal-table]")); }
     else if (key === "contrib") cfg = contribCfg();
-    else cfg = wtsCfg();
+    else {
+      if (!D.portfolios[state.pf].weights) { return; }
+      cfg = wtsCfg();
+    }
     destroyModalCharts();
     modalCharts.push(new Chart(canvas, cfg));
   }

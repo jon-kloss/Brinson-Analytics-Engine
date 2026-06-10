@@ -2,72 +2,108 @@ package report
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.nio.file.Path
 import java.sql.Connection
+import java.util.zip.GZIPOutputStream
 
 /**
  * `brinson serve` — a small live backend over the DuckDB file, built on the JDK's
  * own HTTP server (zero dependencies, matching the repo's discipline).
  *
- * Routes:
- *   GET /                    the dashboard (same bundled assets as the static site)
- *   GET /api/meta            shared data + a light portfolio list ({id, name} stubs)
- *   GET /api/portfolio/{id}  one portfolio's series, attribution, contributors, weights
- *   GET /api/data            the full document (all portfolios) — bulk consumers
- *   GET /data.json           alias of /api/data, so the static bootstrap path stays live
- *   GET /healthz             liveness probe
+ * The API is shaped by the UI's access pattern — each endpoint returns only what a
+ * specific stage of the page needs:
  *
- * Payloads are computed once at startup (the expensive part is the same single-pass
- * attribution query the bench measures) and served from memory — analytics over
- * end-of-day data don't change between batch loads, so per-request recompute would
- * buy nothing. CORS is wide open: the data is synthetic and public.
+ *   GET /api/portfolios              picker list: [{id, name}]            (~1.6 KB)
+ *   GET /api/market                  shared context: dates, rb, sectors   (~13 KB)
+ *   GET /api/portfolio/{id}          returns, risk, attribution, contributors
+ *   GET /api/portfolio/{id}/weights  the weights matrix — 60% of a portfolio's
+ *                                    bytes feeding one below-the-fold chart,
+ *                                    so it loads after first paint
+ *   GET /api/data | /data.json       the full document (bulk / static parity)
+ *   GET /healthz                     liveness probe
+ *   GET /                            the dashboard (same bundled assets as Pages)
+ *
+ * Everything is computed once at startup and pre-compressed; responses are served
+ * from memory with gzip when the client accepts it. CORS is wide open: the data is
+ * synthetic and public.
  */
 fun serve(dbPath: Path, port: Int, echo: (String) -> Unit) {
     val started = System.currentTimeMillis()
     val parts = etl.openDatabase(dbPath).use { conn: Connection -> buildDashboardParts(conn) }
-    val meta = parts.metaJson.toByteArray(Charsets.UTF_8)
-    val full = parts.fullJson().toByteArray(Charsets.UTF_8)
-    val portfolios = parts.portfolioJson.mapValues { (_, v) -> v.toByteArray(Charsets.UTF_8) }
-    echo(
-        "Computed dashboard JSON in ${System.currentTimeMillis() - started} ms " +
-            "(meta %,d B, %,d portfolios ~%,d B each, full %,d B)"
-                .fmt(meta.size, portfolios.size, portfolios.values.first().size, full.size),
-    )
+
+    class Payload(text: ByteArray, val type: String) {
+        val plain: ByteArray = text
+        val gz: ByteArray = ByteArrayOutputStream().also { bos ->
+            GZIPOutputStream(bos).use { it.write(text) }
+        }.toByteArray()
+    }
+
+    val json = "application/json; charset=utf-8"
+    fun jsonPayload(s: String) = Payload(s.toByteArray(Charsets.UTF_8), json)
+
+    val market = jsonPayload(parts.marketJson)
+    val portfolios = jsonPayload(parts.portfoliosJson)
+    val cores = parts.portfolioCore.mapValues { (_, v) -> jsonPayload(v) }
+    val weights = parts.portfolioWeights.mapValues { (_, v) -> jsonPayload("{\"weights\":$v}") }
+    val full = jsonPayload(parts.fullJson())
+    val health = Payload("ok".toByteArray(), "text/plain")
+    val notFound = Payload("not found".toByteArray(), "text/plain")
 
     val assets = listOf("index.html", "styles.css", "dashboard.js", "guide.html").associateWith { name ->
-        object {}.javaClass.getResourceAsStream("/dashboard/$name")!!.use { it.readBytes() }
-    }
-    fun contentType(name: String) = when {
-        name.endsWith(".html") -> "text/html; charset=utf-8"
-        name.endsWith(".css") -> "text/css; charset=utf-8"
-        name.endsWith(".js") -> "application/javascript; charset=utf-8"
-        else -> "application/octet-stream"
+        val type = when {
+            name.endsWith(".html") -> "text/html; charset=utf-8"
+            name.endsWith(".css") -> "text/css; charset=utf-8"
+            else -> "application/javascript; charset=utf-8"
+        }
+        Payload(object {}.javaClass.getResourceAsStream("/dashboard/$name")!!.use { it.readBytes() }, type)
     }
 
-    fun HttpExchange.respond(status: Int, body: ByteArray, type: String) {
+    echo(
+        ("Boot in ${System.currentTimeMillis() - started} ms — payloads (plain/gzip B): " +
+            "portfolios %,d/%,d · market %,d/%,d · core ~%,d/%,d · weights ~%,d/%,d · full %,d/%,d").fmt(
+            portfolios.plain.size, portfolios.gz.size, market.plain.size, market.gz.size,
+            cores.values.first().plain.size, cores.values.first().gz.size,
+            weights.values.first().plain.size, weights.values.first().gz.size,
+            full.plain.size, full.gz.size,
+        ),
+    )
+
+    fun HttpExchange.respond(status: Int, p: Payload) {
+        val gzipOk = requestHeaders.getFirst("Accept-Encoding")?.contains("gzip") == true
         responseHeaders.add("Access-Control-Allow-Origin", "*")
-        responseHeaders.add("Content-Type", type)
+        responseHeaders.add("Content-Type", p.type)
+        val body = if (gzipOk) {
+            responseHeaders.add("Content-Encoding", "gzip")
+            p.gz
+        } else {
+            p.plain
+        }
         sendResponseHeaders(status, body.size.toLong())
         responseBody.use { it.write(body) }
     }
 
-    val json = "application/json; charset=utf-8"
     val server = HttpServer.create(InetSocketAddress("0.0.0.0", port), 0)
     server.createContext("/") { ex ->
         val path = ex.requestURI.path.trimStart('/')
         when {
-            path == "api/meta" -> ex.respond(200, meta, json)
+            path == "api/portfolios" -> ex.respond(200, portfolios)
+            path == "api/market" -> ex.respond(200, market)
             path.startsWith("api/portfolio/") -> {
-                val body = path.removePrefix("api/portfolio/").toIntOrNull()?.let { portfolios[it] }
-                if (body != null) ex.respond(200, body, json)
-                else ex.respond(404, "unknown portfolio".toByteArray(), "text/plain")
+                val rest = path.removePrefix("api/portfolio/")
+                val payload = when {
+                    rest.endsWith("/weights") ->
+                        rest.removeSuffix("/weights").toIntOrNull()?.let { weights[it] }
+                    else -> rest.toIntOrNull()?.let { cores[it] }
+                }
+                if (payload != null) ex.respond(200, payload) else ex.respond(404, notFound)
             }
-            path == "api/data" || path == "data.json" -> ex.respond(200, full, json)
-            path == "healthz" -> ex.respond(200, "ok".toByteArray(), "text/plain")
-            path.isEmpty() || path == "index.html" -> ex.respond(200, assets.getValue("index.html"), contentType("index.html"))
-            assets.containsKey(path) -> ex.respond(200, assets.getValue(path), contentType(path))
-            else -> ex.respond(404, "not found".toByteArray(), "text/plain")
+            path == "api/data" || path == "data.json" -> ex.respond(200, full)
+            path == "healthz" -> ex.respond(200, health)
+            path.isEmpty() || path == "index.html" -> ex.respond(200, assets.getValue("index.html"))
+            assets.containsKey(path) -> ex.respond(200, assets.getValue(path))
+            else -> ex.respond(404, notFound)
         }
     }
     server.start()
