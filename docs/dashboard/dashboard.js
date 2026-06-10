@@ -96,6 +96,11 @@ window.BrinsonDashboard = function (mount, opts) {
     var r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
     return "rgba(" + r + "," + g + "," + b + "," + a + ")";
   }
+  function hexLift(h) { // palette color pushed toward white: legible text on the dark tooltip panel
+    h = h.replace("#", "");
+    function m(v) { return Math.round(v + (255 - v) * 0.35); }
+    return "rgb(" + m(parseInt(h.substr(0, 2), 16)) + "," + m(parseInt(h.substr(2, 2), 16)) + "," + m(parseInt(h.substr(4, 2), 16)) + ")";
+  }
 
   // ── DOM scaffold ──────────────────────────────────────────────────────
   var root = document.createElement("div");
@@ -183,8 +188,7 @@ window.BrinsonDashboard = function (mount, opts) {
           '<section class="bx-card">' +
             '<div class="bx-cardhead"><h2>Sector weights <span class="bx-sub2" data-wtssub>weekly</span></h2>' +
               '<div class="bx-head-right"><div class="bx-ranges bx-mini" data-wtsmode>' +
-                '<button data-m="w" class="on">Weights</button><button data-m="a">Active</button></div>' +
-                '<div class="bx-legend" data-wtslegend style="flex-wrap:wrap;max-width:300px;justify-content:flex-end"></div>' + EXPAND("wts") + '</div></div>' +
+                '<button data-m="w" class="on">Weights</button><button data-m="a">Active</button></div>' + EXPAND("wts") + '</div></div>' +
             '<div class="bx-chartwrap bx-wts-wrap"><canvas data-wts></canvas></div>' +
           '</section>' +
         '</div>' +
@@ -445,29 +449,50 @@ window.BrinsonDashboard = function (mount, opts) {
     };
   }
 
-  function wtsLegend() {
-    return D.sectors.map(function (s, i) {
-      return '<span><i style="background:' + PALETTE[i % PALETTE.length] + '"></i>' + shortSec(i) + "</span>";
-    }).join("");
-  }
   function renderWeights() {
     var p = D.portfolios[state.pf];
     var sub = root.querySelector("[data-wtssub]");
     if (state.wts === "a") { // average active weight needs only the attribution block
       sub.textContent = "avg active vs benchmark";
-      root.querySelector("[data-wtslegend]").innerHTML = "";
       mk("wts", wtsCfg());
       return;
     }
     sub.textContent = "weekly";
     if (!p.weights) { // matrix arrives after first paint in split-API mode
-      root.querySelector("[data-wtslegend]").innerHTML = "";
       if (charts.wts) { charts.wts.destroy(); delete charts.wts; }
       return;
     }
-    root.querySelector("[data-wtslegend]").innerHTML = wtsLegend();
     mk("wts", wtsCfg());
   }
+  // Sector names drawn inside their own bands (sampled mid-series; the bands are
+  // near-horizontal, so one sample is representative). Replaces an 11-swatch
+  // legend that forced color-matching across similar translucent hues — and that
+  // never fit on phones. Bands too thin to label are covered by the tooltip.
+  var bandLabels = {
+    id: "bandLabels",
+    afterDatasetsDraw: function (chart) {
+      var c = chart.ctx, n = chart.data.datasets.length;
+      var xi = Math.floor((chart.data.labels.length - 1) / 2);
+      var minH = MOBILE ? 12.5 : 11.5;
+      c.save();
+      c.font = "600 " + (MOBILE ? 10.5 : 9.5) + 'px "IBM Plex Sans", sans-serif';
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillStyle = tok("--ink");
+      var below = chart.scales.y.getPixelForValue(0); // band k sits on band k-1
+      for (var k = 0; k < n; k++) {
+        var el = chart.getDatasetMeta(k).data[xi];
+        if (!el) continue;
+        var h = below - el.y;
+        if (h >= minH) {
+          c.globalAlpha = 0.95;
+          c.fillText(chart.data.datasets[k].label, el.x, el.y + h / 2 + 0.5);
+        }
+        below = el.y;
+      }
+      c.restore();
+    }
+  };
   function wtsCfg() {
     var p = D.portfolios[state.pf];
     if (state.wts === "a") {
@@ -489,19 +514,37 @@ window.BrinsonDashboard = function (mount, opts) {
         }
       };
     }
+    // Largest average weight stacks at the bottom: the dominant sectors form
+    // stable, labelable bands and the thin ones collect at the top. Colors stay
+    // keyed to the sector's global index so they match across portfolios.
+    var order = D.sectors.map(function (_, i) { return i; })
+      .sort(function (a, b) { return p.attribution[b].wp - p.attribution[a].wp; });
+    var seam = tok("--bg"); // hairline of page background separates the bands
     return {
       type: "line",
+      plugins: [bandLabels, bxCrosshair],
       data: {
         labels: D.weekIdx.slice(p.wstart || 0, (p.wstart || 0) + p.weights[0].length)
           .map(function (i) { return D.dates[i]; }),
-        datasets: D.sectors.map(function (s, si) {
+        datasets: order.map(function (si) {
           var c = PALETTE[si % PALETTE.length];
-          return { label: s, data: p.weights[si].map(function (w) { return 100 * w; }), borderColor: hexA(c, 0.9), backgroundColor: hexA(c, 0.55), fill: true, pointRadius: 0, borderWidth: 0.6, tension: 0.2 };
+          return { label: shortSec(si), data: p.weights[si].map(function (w) { return 100 * w; }), borderColor: seam, backgroundColor: hexA(c, 0.7), solid: c, fill: true, pointRadius: 0, borderWidth: 1, tension: 0.2 };
         })
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { display: false }, tooltip: tooltipCfg({
+          displayColors: false, padding: 7,
+          titleFont: { family: "IBM Plex Mono", size: TT_TITLE - 1 },
+          bodyFont: { family: "IBM Plex Mono", size: TT_BODY - 1.5 },
+          // top-to-bottom rows mirror the visual stack; rows take their band color
+          itemSort: function (a, b) { return b.datasetIndex - a.datasetIndex; },
+          callbacks: {
+            label: function (cx) { return cx.dataset.label + "  " + (+cx.raw).toFixed(1) + "%"; },
+            labelTextColor: function (cx) { return hexLift(cx.dataset.solid); }
+          }
+        }) },
         scales: baseScales({ y: { stacked: true, max: 100, ticks: { callback: function (v) { return v + "%"; }, maxTicksLimit: 4 } } })
       }
     };
@@ -536,7 +579,7 @@ window.BrinsonDashboard = function (mount, opts) {
   function destroyModalCharts() { modalCharts.forEach(function (c) { c.destroy(); }); modalCharts = []; }
   function buildModalBody(key) {
     var body = root.querySelector("[data-modal-body]");
-    var legend = key === "perf" ? perfLegend() : (key === "wts" ? wtsLegend() : "");
+    var legend = key === "perf" ? perfLegend() : "";
     body.innerHTML =
       (legend ? '<div class="bx-legend bx-modal-legend">' + legend + '</div>' : "") +
       '<div class="bx-modal-chart"><canvas data-modalcanvas></canvas></div>' +

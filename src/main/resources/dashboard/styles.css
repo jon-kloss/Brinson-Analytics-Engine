@@ -235,7 +235,7 @@
 .bx-perf .bx-chartwrap { height: 230px; }
 .bx-wf-wrap { height: 150px; }
 .bx-contrib-wrap { height: 150px; }
-.bx-wts-wrap { height: 150px; }
+.bx-wts-wrap { height: 175px; } /* 11 stacked bands need headroom for in-band labels */
 
 /* two-column lower grid */
 .bx-grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: var(--gap); flex: 1 1 auto; min-height: 0; }
@@ -338,8 +338,6 @@ table.bx-tab .neg { color: var(--down); }
   .brinson[data-variant="studio"] .bx-body { padding: 10px 14px 20px; }
   .bx-cardhead { flex-wrap: wrap; row-gap: 6px; }
   .bx-cardhead .bx-legend { flex-wrap: wrap; }
-  /* 11 sector chips cannot fit a phone header row; the expanded view has them */
-  [data-wtslegend] { display: none !important; }
 
   .bx-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .bx-tablewrap table.bx-tab, .bx-modal-table table.bx-tab { min-width: 520px; }
@@ -377,7 +375,8 @@ table.bx-tab .neg { color: var(--down); }
   .bx-foot { font-size: 11px; }
   .bx-titles .bx-tag { display: none; }
   .bx-perf .bx-chartwrap, .brinson[data-fit="scroll"] .bx-perf .bx-chartwrap { height: 220px; }
-  .bx-wf-wrap, .bx-contrib-wrap, .bx-wts-wrap { height: 185px; }
+  .bx-wf-wrap, .bx-contrib-wrap { height: 185px; }
+  .bx-wts-wrap { height: 215px; } /* taller bands: every sector label fits on a phone */
   .bx-modal-head h2 { font-size: 17px; }
 }
 
