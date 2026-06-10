@@ -4,34 +4,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>brinson — portfolio analytics dashboard</title>
+<title>brinson — portfolio analytics</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
-  :root { --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb; --up:#16a34a; --down:#dc2626; --accent:#2563eb; }
-  body { font-family:-apple-system,"Segoe UI",Roboto,sans-serif; margin:0; color:var(--ink); background:#f8fafc; }
-  header { background:#fff; border-bottom:1px solid var(--line); padding:14px 24px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
-  header h1 { font-size:1.05rem; margin:0 12px 0 0; }
-  select,button { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
-  button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
-  main { max-width:1100px; margin:0 auto; padding:18px 24px 48px; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:6px 0 18px; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
-  .card .k { color:var(--sub); font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; }
-  .card .v { font-size:1.25rem; font-weight:600; margin-top:2px; }
+  :root {
+    --paper:#FAF9F5; --card:#FFFFFF; --ink:#29261D; --sub:#8A8678; --line:#E8E5DC;
+    --accent:#D97757; --bench:#A8A296; --up:#6E9B6A; --down:#C65D49;
+    --serif:ui-serif, Georgia, Cambria, "Times New Roman", serif;
+    --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:var(--sans); margin:0; color:var(--ink); background:var(--paper); }
+  header { padding:22px 28px 14px; display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;
+           border-bottom:1px solid var(--line); }
+  header h1 { font-family:var(--serif); font-weight:500; font-size:1.45rem; margin:0 10px 0 0; letter-spacing:-.01em; }
+  header h1 em { color:var(--accent); font-style:normal; }
+  select,button { font:inherit; font-size:.85rem; padding:7px 14px; border:1px solid var(--line);
+                  border-radius:999px; background:var(--card); color:var(--ink); cursor:pointer; }
+  select:hover,button:hover { border-color:var(--sub); }
+  button.active { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  main { max-width:1120px; margin:0 auto; padding:20px 28px 56px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:8px 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+          box-shadow:0 1px 2px rgba(41,38,29,.04); }
+  .card .k { color:var(--sub); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; }
+  .card .v { font-family:var(--serif); font-size:1.45rem; font-weight:500; margin-top:3px; letter-spacing:-.01em; }
   .pos { color:var(--up); } .neg { color:var(--down); }
-  section { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }
-  section h2 { font-size:.95rem; margin:0 0 10px; }
-  .note { color:var(--sub); font-size:.78rem; margin-top:8px; }
-  table { border-collapse:collapse; width:100%; font-size:.85rem; margin-top:10px; }
-  th,td { padding:5px 8px; text-align:right; border-bottom:1px solid var(--line); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+            margin-bottom:18px; box-shadow:0 1px 2px rgba(41,38,29,.04); }
+  section h2 { font-family:var(--serif); font-weight:500; font-size:1.05rem; margin:0 0 12px; }
+  .note { color:var(--sub); font-size:.78rem; margin-top:10px; line-height:1.5; }
+  table { border-collapse:collapse; width:100%; font-size:.84rem; margin-top:12px; }
+  th { color:var(--sub); font-weight:500; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; }
+  th,td { padding:6px 8px; text-align:right; border-bottom:1px solid var(--line); }
   th:first-child,td:first-child { text-align:left; }
+  tr:last-child td { border-bottom:none; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  @media (max-width:860px){ .grid2{grid-template-columns:1fr;} }
+  @media (max-width:880px){ .grid2{grid-template-columns:1fr;} header{padding:18px 16px 12px;} main{padding:16px;} }
 </style>
 </head>
 <body>
 <header>
-  <h1>brinson dashboard</h1>
+  <h1><em>brinson</em> portfolio analytics</h1>
   <select id="pf"></select>
   <span id="ranges">
     <button data-r="all" class="active">All</button>
@@ -45,19 +59,26 @@
   <div class="cards" id="cards"></div>
   <section><h2>Cumulative return vs benchmark</h2><canvas id="perf" height="90"></canvas></section>
   <div class="grid2">
-    <section><h2>Brinson-Fachler attribution (Cariño-linked, full period, bps)</h2>
-      <canvas id="wf" height="160"></canvas><div id="atab"></div></section>
-    <section><h2>Contributors (full period, bps)</h2><canvas id="contrib" height="160"></canvas>
-      <h2 style="margin-top:18px">Sector weights (weekly)</h2><canvas id="wts" height="160"></canvas></section>
+    <section><h2>Brinson-Fachler attribution <span style="color:var(--sub);font-size:.8rem">(Cariño-linked · full period · bps)</span></h2>
+      <canvas id="wf" height="170"></canvas><div id="atab"></div></section>
+    <section><h2>Contributors <span style="color:var(--sub);font-size:.8rem">(full period · bps)</span></h2><canvas id="contrib" height="170"></canvas>
+      <h2 style="margin-top:20px">Sector weights <span style="color:var(--sub);font-size:.8rem">(weekly)</span></h2><canvas id="wts" height="170"></canvas></section>
   </div>
   <p class="note">Cards and the performance chart recompute for the selected range from the baked daily
   series, using the formulas documented in METHODOLOGY.md (TWR geometric linking; tracking error =
-  stdev(active)·&radic;252; IR = mean(active)·252 / TE; max drawdown on the compounded path).
+  stdev(active)&middot;&radic;252; IR = mean(active)&middot;252 / TE; max drawdown on the compounded path).
   Attribution, contributors, and weights are full-period.</p>
 </main>
 <script>
 "use strict";
 var D = null, charts = {}, range = "all";
+var INK = "#29261D", SUB = "#8A8678", LINE = "#EDEAE1";
+var ACCENT = "#D97757", BENCH = "#A8A296";
+var UP = "rgba(110,155,106,.85)", DOWN = "rgba(198,93,73,.85)", TOTAL = "rgba(41,38,29,.88)";
+
+Chart.defaults.color = SUB;
+Chart.defaults.borderColor = LINE;
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 function fmtPct(x, dp) { return (x >= 0 ? "+" : "") + (100 * x).toFixed(dp == null ? 2 : dp) + "%"; }
 function fmtBps(x) { return (x >= 0 ? "+" : "") + (10000 * x).toFixed(1); }
@@ -80,7 +101,7 @@ function render() {
   var twr = cp[cp.length-1], btwr = cb[cb.length-1];
   var te = stdev(act) * Math.sqrt(252);
   var ir = te > 0 ? mean(act) * 252 / te : null;
-  document.getElementById("period").textContent = dates[0] + " .. " + dates[dates.length-1] + " (" + dates.length + " trading days)";
+  document.getElementById("period").textContent = dates[0] + " – " + dates[dates.length-1] + " · " + dates.length + " trading days";
   document.getElementById("cards").innerHTML =
     card("TWR", fmtPct(twr), true) + card("Benchmark", fmtPct(btwr), true) +
     card("Active", fmtPct(twr - btwr), true) + card("Tracking error", fmtPct(te)) +
@@ -88,25 +109,26 @@ function render() {
 
   mkChart("perf", { type: "line",
     data: { labels: dates, datasets: [
-      { label: "Portfolio", data: cp.map(function (x) { return 100*x; }), borderColor: "#2563eb", pointRadius: 0, borderWidth: 2 },
-      { label: "Benchmark", data: cb.map(function (x) { return 100*x; }), borderColor: "#9ca3af", pointRadius: 0, borderWidth: 2 }]},
+      { label: "Portfolio", data: cp.map(function (x) { return 100*x; }), borderColor: ACCENT, pointRadius: 0, borderWidth: 2.25 },
+      { label: "Benchmark", data: cb.map(function (x) { return 100*x; }), borderColor: BENCH, pointRadius: 0, borderWidth: 1.75, borderDash: [5,4] }]},
     options: { animation: false, interaction: { mode: "index", intersect: false },
+      plugins: { legend: { labels: { boxWidth: 18, boxHeight: 2 } } },
       scales: { y: { ticks: { callback: function (v) { return v + "%"; } } },
-                x: { ticks: { maxTicksLimit: 8 } } } } });
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } } } } });
 
   var rowsArr = D.sectors.map(function (s, i) { var a = p.attribution[i];
     return { s: s, wp: a.wp, wb: a.wb, a: a.a, sel: a.s, i: a.i, tot: a.a + a.s + a.i }; });
   rowsArr.sort(function (x, y) { return y.tot - x.tot; });
   var run = 0, bars = [], colors = [];
   rowsArr.forEach(function (r) { bars.push([10000*run, 10000*(run + r.tot)]); run += r.tot;
-    colors.push(r.tot >= 0 ? "rgba(22,163,74,.8)" : "rgba(220,38,38,.8)"); });
-  bars.push([0, 10000*run]); colors.push("rgba(37,99,235,.9)");
+    colors.push(r.tot >= 0 ? UP : DOWN); });
+  bars.push([0, 10000*run]); colors.push(TOTAL);
   mkChart("wf", { type: "bar",
     data: { labels: rowsArr.map(function (r) { return r.s; }).concat(["Active"]),
-      datasets: [{ data: bars, backgroundColor: colors, borderSkipped: false }] },
+      datasets: [{ data: bars, backgroundColor: colors, borderSkipped: false, borderRadius: 3 }] },
     options: { animation: false, plugins: { legend: { display: false },
         tooltip: { callbacks: { label: function (c) { return (c.raw[1]-c.raw[0]).toFixed(1) + " bps"; } } } },
-      scales: { x: { ticks: { maxRotation: 60, minRotation: 45, font: { size: 10 } } } } } });
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 60, minRotation: 45, font: { size: 10 } } } } } });
 
   var html = "<table><tr><th>Sector</th><th>wp</th><th>wb</th><th>Alloc</th><th>Select</th><th>Inter</th><th>Total</th></tr>";
   rowsArr.forEach(function (r) { html += "<tr><td>" + r.s + "</td><td>" + (100*r.wp).toFixed(1) + "%</td><td>" +
@@ -118,18 +140,19 @@ function render() {
   mkChart("contrib", { type: "bar",
     data: { labels: cons.map(function (c) { return c.t; }),
       datasets: [{ data: cons.map(function (c) { return 10000*c.c; }),
-        backgroundColor: cons.map(function (c) { return c.c >= 0 ? "rgba(22,163,74,.8)" : "rgba(220,38,38,.8)"; }) }] },
-    options: { indexAxis: "y", animation: false, plugins: { legend: { display: false } } } });
+        backgroundColor: cons.map(function (c) { return c.c >= 0 ? UP : DOWN; }), borderRadius: 3 }] },
+    options: { indexAxis: "y", animation: false, plugins: { legend: { display: false } },
+      scales: { y: { grid: { display: false } } } } });
 
-  var palette = ["#2563eb","#16a34a","#dc2626","#f59e0b","#7c3aed","#0891b2","#be185d","#4d7c0f","#b45309","#475569","#0f766e"];
+  var palette = ["#D97757","#6E9B6A","#C65D49","#C9A227","#7E6E9E","#5E8E9E","#B0608A","#8A9B5C","#B07B4A","#8A8678","#5E9B8A"];
   mkChart("wts", { type: "line",
     data: { labels: D.weekIdx.map(function (i) { return D.dates[i]; }),
       datasets: D.sectors.map(function (s, si) { return { label: s, data: p.weights[si].map(function (w) { return 100*w; }),
-        borderColor: palette[si % palette.length], backgroundColor: palette[si % palette.length] + "55",
+        borderColor: palette[si % palette.length], backgroundColor: palette[si % palette.length] + "59",
         fill: true, pointRadius: 0, borderWidth: 1 }; }) },
-    options: { animation: false, plugins: { legend: { labels: { boxWidth: 10, font: { size: 9 } } } },
+    options: { animation: false, plugins: { legend: { labels: { boxWidth: 10, boxHeight: 10, font: { size: 9 } } } },
       scales: { y: { stacked: true, max: 100, ticks: { callback: function (v) { return v + "%"; } } },
-                x: { ticks: { maxTicksLimit: 8 } } } } });
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } } } } });
 }
 
 function mkChart(id, cfg) {

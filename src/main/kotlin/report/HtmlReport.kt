@@ -39,8 +39,8 @@ fun buildHtmlReport(
     val bars = steps.joinToString(",") { (a, b, _) -> "[%.4f, %.4f]".fmt(a * 1e4, b * 1e4) } +
         ",[0, %.4f]".fmt(totalActive * 1e4)
     val colors = steps.joinToString(",") { (_, _, r) ->
-        if (r.total >= 0) "\"rgba(22,163,74,0.8)\"" else "\"rgba(220,38,38,0.8)\""
-    } + ",\"rgba(37,99,235,0.9)\""
+        if (r.total >= 0) "\"rgba(110,155,106,0.85)\"" else "\"rgba(198,93,73,0.85)\""
+    } + ",\"rgba(41,38,29,0.88)\""
     val tableRows = sorted.joinToString("\n") { r ->
         "<tr><td>${esc(r.sector)}</td><td>%.1f%%</td><td>%.1f%%</td><td>%+.1f</td><td>%+.1f</td><td>%+.1f</td><td><b>%+.1f</b></td></tr>"
             .fmt(
@@ -57,7 +57,7 @@ fun buildHtmlReport(
 <title>$title — Brinson-Fachler attribution</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
-  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 2rem auto; max-width: 960px; color: #1f2937; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #FAF9F5; margin: 2rem auto; max-width: 960px; color: #29261D; }
   h1 { font-size: 1.3rem; } .sub { color: #6b7280; margin-bottom: 1.5rem; }
   table { border-collapse: collapse; margin-top: 2rem; width: 100%; font-size: 0.9rem; }
   th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid #e5e7eb; }
