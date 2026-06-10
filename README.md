@@ -148,9 +148,10 @@ Top contributors (sum of daily w*r, in bps)
 
 ## Dashboard
 
-A static, dependency-free dashboard over all 50 portfolios — portfolio picker, date-range
-presets, cumulative TWR vs benchmark, risk cards (tracking error, information ratio, max
-drawdown), the Cariño-linked attribution waterfall, contributors, and weekly sector weights:
+A static, dependency-free dashboard over all 50 portfolios — portfolio picker, calendar
+period chips (MTD/QTD/YTD/1Y/SI), KPI cards that double as chart-view selectors (cumulative
+return, cumulative active, drawdown, rolling tracking error), the Cariño-linked attribution
+waterfall, contributors, and sector weights with an active-weight exposures toggle:
 
 ```bash
 build/install/brinson/bin/brinson dashboard   # bakes docs/dashboard/{index.html,data.json}

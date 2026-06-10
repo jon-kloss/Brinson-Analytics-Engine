@@ -380,3 +380,7 @@ table.bx-tab .neg { color: var(--down); }
   .bx-wf-wrap, .bx-contrib-wrap, .bx-wts-wrap { height: 185px; }
   .bx-modal-head h2 { font-size: 17px; }
 }
+
+/* compact pill group (weights-card mode toggle) */
+.bx-ranges.bx-mini { padding: 2px; }
+.bx-ranges.bx-mini button { padding: 4px 9px; font-size: 10.5px; }
