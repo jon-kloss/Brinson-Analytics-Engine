@@ -31,28 +31,39 @@ directory) — browsers block <code>fetch</code> from <code>file://</code>.</div
 // Data source resolution, first success wins:
 //   1. ?api=<backend base url>   e.g. ?api=https://brinson.up.railway.app
 //      (a url ending in /api/data or .json is treated as a full-document fetch)
-//   2. same-origin api/meta      live backend: fetch shared meta + portfolios on demand
+//   2. same-origin live backend  /api/market + /api/portfolios in parallel, then
+//      per-portfolio detail on selection; the weights matrix arrives after first
+//      paint and the chart fills in
 //   3. data.json                 baked static file (GitHub Pages) — everything at once
 var INITIAL_PF = 6; // Portfolio 007, the README's example
+var dash = null;
 var override = (new URLSearchParams(location.search).get("api") || "").replace(/\/+$/, "");
 
 function getJson(u) {
   return fetch(u).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
 }
 
-// Split mode: small meta payload now, one portfolio at a time afterwards.
 function splitMode(base) {
   var pre = base ? base + "/" : "";
-  return getJson(pre + "api/meta").then(function (meta) {
-    meta.__loadPf = function (i) {
-      var cur = meta.portfolios[i];
-      if (cur && cur.rp) return Promise.resolve();
-      return getJson(pre + "api/portfolio/" + cur.id).then(function (fullP) {
-        meta.portfolios[i] = fullP;
-      });
-    };
-    return meta.__loadPf(INITIAL_PF).then(function () { return meta; });
-  });
+  return Promise.all([getJson(pre + "api/market"), getJson(pre + "api/portfolios")])
+    .then(function (r) {
+      var D = r[0];
+      D.portfolios = r[1];
+      D.__loadPf = function (i) {
+        var cur = D.portfolios[i];
+        if (cur.rp) return Promise.resolve();
+        return getJson(pre + "api/portfolio/" + cur.id).then(function (core) {
+          D.portfolios[i] = core;
+          // Weights feed one below-the-fold chart and are 60% of the bytes:
+          // fetch after the portfolio renders, then refresh in place.
+          getJson(pre + "api/portfolio/" + core.id + "/weights").then(function (w) {
+            D.portfolios[i].weights = w.weights;
+            if (dash) dash.update({});
+          });
+        });
+      };
+      return D.__loadPf(INITIAL_PF).then(function () { return D; });
+    });
 }
 
 var attempt;
@@ -65,7 +76,7 @@ if (override) {
 attempt
   .then(function (d) {
     window.BRINSON_DATA = d;
-    window.BrinsonDashboard(document.getElementById("stage"), {
+    dash = window.BrinsonDashboard(document.getElementById("stage"), {
       variant: "studio",
       theme: "light",
       tweakable: false,

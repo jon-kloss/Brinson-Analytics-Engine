@@ -38,9 +38,20 @@ private fun jsonString(s: String): String =
     "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"")
         .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\""
 
+private fun trimZeros(s: String): String =
+    if ('.' in s) s.trimEnd('0').trimEnd('.') else s
+
+/** Returns/effects: 7 decimals. Compounding drift over 504 days is bounded by
+ *  504 * 5e-8 ~ 0.25 bp — invisible at the dashboard's display precision. */
 private fun num(x: Double): String {
     require(x.isFinite()) { "non-finite value in dashboard data: $x" }
-    return "%.8f".fmt(x)
+    return trimZeros("%.7f".fmt(x))
+}
+
+/** Weights: 5 decimals = 0.001% resolution, far below chart pixel resolution. */
+private fun numW(x: Double): String {
+    require(x.isFinite()) { "non-finite value in dashboard data: $x" }
+    return trimZeros("%.5f".fmt(x))
 }
 
 /** Compact sector labels for chart axes/legends, where full GICS names collide. */
@@ -52,20 +63,30 @@ private val SECTOR_SHORT = mapOf(
 )
 
 /**
- * The dashboard payload split into servable pieces (see `serve`):
- * shared metadata with portfolio stubs, per-portfolio detail documents, and the
- * assembled full document (the static data.json).
+ * The dashboard payload split along the UI's actual access pattern (see `serve`):
+ * market context and the portfolio list load at boot; per-portfolio detail loads on
+ * selection; the weights matrix (60% of a portfolio's bytes, one below-the-fold
+ * chart) loads after first paint. The static data.json is the spliced full document.
  */
 class DashboardJson(
-    private val sharedPrefix: String,
+    /** Shared fields (from/to/dates/sectors/weekIdx/rb) as a JSON object body. */
+    private val sharedFields: String,
     private val stubs: List<String>,
-    val portfolioJson: Map<Int, String>,
+    /** Per-portfolio detail WITHOUT weights: {"id":..,...,"bottom":[..]} */
+    val portfolioCore: Map<Int, String>,
+    /** Per-portfolio weights matrix: [[...],...] */
+    val portfolioWeights: Map<Int, String>,
 ) {
-    /** Everything shared plus a light portfolio list of {id, name} stubs. */
-    val metaJson: String = sharedPrefix + stubs.joinToString(",") + "]}"
+    val marketJson: String = "{" + sharedFields + "}"
+    val portfoliosJson: String = "[" + stubs.joinToString(",") + "]"
+
+    private fun fullPiece(pf: Int): String =
+        portfolioCore.getValue(pf).dropLast(1) + ",\"weights\":" + portfolioWeights.getValue(pf) + "}"
 
     /** The complete document: identical to what the static bake ships. */
-    fun fullJson(): String = sharedPrefix + portfolioJson.values.joinToString(",") + "]}"
+    fun fullJson(): String =
+        "{" + sharedFields + ",\"portfolios\":[" +
+            portfolioCore.keys.joinToString(",") { fullPiece(it) } + "]}"
 }
 
 fun buildDashboardJson(conn: Connection): String = buildDashboardParts(conn).fullJson()
@@ -98,18 +119,17 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
     val weekIdx = dates.indices.step(5).toList()
 
     val sb = StringBuilder()
-    sb.append("{")
     sb.append("\"from\":${jsonString(from.toString())},\"to\":${jsonString(to.toString())},")
     sb.append("\"dates\":[").append(dates.joinToString(",") { jsonString(it.toString()) }).append("],")
     sb.append("\"sectors\":[").append(sectors.joinToString(",") { jsonString(it) }).append("],")
     sb.append("\"sectorsShort\":[")
         .append(sectors.joinToString(",") { jsonString(SECTOR_SHORT[it] ?: it) }).append("],")
     sb.append("\"weekIdx\":[").append(weekIdx.joinToString(",")).append("],")
-    sb.append("\"rb\":[").append(rb.joinToString(",") { num(it) }).append("],")
-    sb.append("\"portfolios\":[")
-    val sharedPrefix = sb.toString()
+    sb.append("\"rb\":[").append(rb.joinToString(",") { num(it) }).append("]")
+    val sharedFields = sb.toString()
 
-    val pieces = LinkedHashMap<Int, String>()
+    val cores = LinkedHashMap<Int, String>()
+    val weightPieces = LinkedHashMap<Int, String>()
     for ((pf, rows) in byPf) {
         val byDate = rows.groupBy { it.date }.toSortedMap()
         val rp = DoubleArray(dates.size)
@@ -148,19 +168,15 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
                 "{\"t\":${jsonString(it.ticker)},\"s\":${jsonString(it.sector)},\"c\":${num(it.contribution)}}"
             }
         pb.append("\"top\":[").append(contribJson(contribs.take(8))).append("],")
-        pb.append("\"bottom\":[").append(contribJson(contribs.takeLast(5).reversed())).append("],")
-        pb.append("\"weights\":[")
-        pb.append(
-            sectors.indices.joinToString(",") { si ->
-                "[" + weekIdx.joinToString(",") { num(wp[si][it]) } + "]"
-            },
-        )
-        pb.append("]}")
-        pieces[pf] = pb.toString()
+        pb.append("\"bottom\":[").append(contribJson(contribs.takeLast(5).reversed())).append("]}")
+        cores[pf] = pb.toString()
+        weightPieces[pf] = "[" + sectors.indices.joinToString(",") { si ->
+            "[" + weekIdx.joinToString(",") { numW(wp[si][it]) } + "]"
+        } + "]"
     }
 
     val stubs = byPf.keys.map { pf ->
         "{\"id\":$pf,\"name\":${jsonString(names[pf] ?: "Portfolio $pf")}}"
     }
-    return DashboardJson(sharedPrefix, stubs, pieces)
+    return DashboardJson(sharedFields, stubs, cores, weightPieces)
 }

@@ -170,17 +170,22 @@ serves it alongside the static assets:
 
 ```bash
 build/install/brinson/bin/brinson serve              # http://localhost:8080
-# GET /                    the dashboard
-# GET /api/meta            shared data + portfolio stubs (~15 KB)
-# GET /api/portfolio/{id}  one portfolio's series/attribution/contributors (~20 KB)
-# GET /api/data            full document (bulk; /data.json is an alias)
-# GET /healthz             liveness probe              (CORS: * on all JSON)
+# GET /                            the dashboard
+# GET /api/portfolios              picker list                      (gzip ~0.3 KB)
+# GET /api/market                  dates, benchmark series, sectors (gzip ~3.6 KB)
+# GET /api/portfolio/{id}          returns/risk/attribution/contributors (gzip ~2.6 KB)
+# GET /api/portfolio/{id}/weights  weights matrix, loaded after first paint (gzip ~2.8 KB)
+# GET /api/data                    full document (bulk; /data.json is an alias)
+# GET /healthz                     liveness probe    (CORS * and gzip on everything)
 ```
 
-The frontend resolves its data source in order: `?api=<backend base url>` query override →
-same-origin `api/meta` → static `data.json` (GitHub Pages). Against a live backend it loads
-**~34 KB** (meta + the initial portfolio) instead of the 1 MB full document, then fetches
-~20 KB per portfolio switch, lazily. One bundle, three deployment modes.
+The API is shaped by the UI's access pattern — each endpoint returns only what one stage of
+the page consumes, with field-appropriate precision (returns 7dp, weights 5dp) and responses
+pre-compressed at boot. Against a live backend the first paint costs **~6.5 KB over the wire**
+(vs the 1 MB full document — ~150x less); portfolio switches fetch ~2.6 KB plus a deferred
+~2.8 KB weights matrix that fills its chart in when it lands. The frontend resolves its data
+source in order: `?api=<backend base url>` override → same-origin live API → static
+`data.json` (GitHub Pages). One bundle, three deployment modes.
 
 **Deploying (e.g. Railway):** the repo's `Dockerfile` builds the app and **bakes the seeded
 dataset into the image at build time** — deterministic generation means the deployed data
