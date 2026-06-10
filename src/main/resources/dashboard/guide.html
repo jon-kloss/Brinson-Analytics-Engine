@@ -249,11 +249,14 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
   <table>
     <tr><th>Control / panel</th><th>What it does</th></tr>
     <tr><td><b>Portfolio picker</b></td><td>Switches all panels to that portfolio's baked data.</td></tr>
-    <tr><td><b>All / 1Y / 6M / 3M</b></td><td>Re-slices the daily return series and <b>recomputes the KPI
-      cards and performance chart in the browser</b> using the formulas above. Attribution,
-      contributors, and weights stay <b>full-period</b> (labeled as such).</td></tr>
-    <tr><td><b>KPI cards</b></td><td>The six headline numbers. <b>Click any card to pin it as the hero.</b>
-      Green/red coloring follows sign.</td></tr>
+    <tr><td><b>MTD / QTD / YTD / 1Y / SI</b></td><td>Calendar-anchored periods (the buy-side convention):
+      month/quarter/year-to-date, trailing year, since inception. Re-slices the daily series and
+      <b>recomputes the KPI cards and main chart in the browser</b> using the formulas above.
+      Attribution, contributors, and weights stay <b>full-period</b> (labeled as such).</td></tr>
+    <tr><td><b>KPI cards</b></td><td>The six headline numbers — and <b>chart-view selectors</b>: clicking a
+      card pins it as the hero and switches the main chart to the lens that explains it
+      (Active → cumulative active return; Max drawdown → underwater chart; TE/IR → rolling
+      63-day tracking error; Total return/Benchmark → the cumulative pair).</td></tr>
     <tr><td><b>Cumulative return</b></td><td>Compounded growth of portfolio (accent) vs benchmark (muted).
       The vertical gap at the right edge is the geometric active return.</td></tr>
     <tr><td><b>Attribution waterfall</b></td><td>Sectors sorted by total effect; each bar <i>starts where the
@@ -262,7 +265,8 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
     <tr><td><b>Contributors</b></td><td>Top and bottom securities by full-period contribution
       (Σ daily w×r), in bps of portfolio return.</td></tr>
     <tr><td><b>Sector weights</b></td><td>Weekly portfolio weights stacked to 100% — drift comes from
-      relative performance and the simulated rebalance trades.</td></tr>
+      relative performance and the simulated rebalance trades. The <b>Weights | Active</b> toggle switches
+      to average active weights (wp − wb) per sector: the exposures-vs-benchmark view.</td></tr>
     <tr><td><b>Expand icons / theme</b></td><td>Any chart opens in a focused modal (Esc closes);
       the moon/sun toggles dark mode.</td></tr>
   </table>

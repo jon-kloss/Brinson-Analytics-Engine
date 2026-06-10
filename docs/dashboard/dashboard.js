@@ -15,7 +15,7 @@ window.BrinsonDashboard = function (mount, opts) {
     variant: variant,
     theme: opts.theme || "light",
     pf: opts.pf == null ? 6 : opts.pf,
-    range: "all",
+    range: "si",
     hero: opts.heroKey || "active",
     tweakable: !!opts.tweakable,
     layout: opts.layout || (variant === "desk" ? "grid" : "hero"),
@@ -26,9 +26,11 @@ window.BrinsonDashboard = function (mount, opts) {
     lineWeight: opts.lineWeight,
     areaFill: opts.areaFill != null ? opts.areaFill : (variant === "studio"),
     gridLines: opts.gridLines || "light",
-    fit: opts.fit === false ? "scroll" : "fill"
+    fit: opts.fit === false ? "scroll" : "fill",
+    wts: "w"
   };
   var charts = {};
+  state.view = (function (k) { return { twr: "return", bench: "return", active: "active", te: "te", ir: "te", mdd: "drawdown" }[k] || "return"; })(state.hero);
 
   // ── math helpers (from the original) ──────────────────────────────────
   function fmtPct(x, dp) { return (x >= 0 ? "+" : "") + (100 * x).toFixed(dp == null ? 2 : dp) + "%"; }
@@ -37,7 +39,44 @@ window.BrinsonDashboard = function (mount, opts) {
   function stdev(a) { var m = mean(a), s = 0; for (var i = 0; i < a.length; i++) s += (a[i] - m) * (a[i] - m); return Math.sqrt(s / (a.length - 1)); }
   function cum(a) { var o = [], g = 1; for (var i = 0; i < a.length; i++) { g *= 1 + a[i]; o.push(g - 1); } return o; }
   function maxDd(a) { var g = 1, p = 1, dd = 0; for (var i = 0; i < a.length; i++) { g *= 1 + a[i]; if (g > p) p = g; dd = Math.min(dd, g / p - 1); } return dd; }
-  function slice(a) { return state.range === "all" ? a : a.slice(Math.max(0, a.length - parseInt(state.range, 10))); }
+  // Calendar-anchored periods (platform convention): MTD/QTD/YTD anchor to the
+  // first trading day of the period containing the last data date; 1Y is one
+  // calendar year back; SI is since inception.
+  function periodStartIdx() {
+    if (state.range === "si") return 0;
+    var dates = D.dates, last = dates[dates.length - 1];
+    var y = +last.slice(0, 4), m = +last.slice(5, 7), target;
+    function p2(n) { return (n < 10 ? "0" : "") + n; }
+    if (state.range === "mtd") target = last.slice(0, 7) + "-01";
+    else if (state.range === "qtd") target = y + "-" + p2(m - ((m - 1) % 3)) + "-01";
+    else if (state.range === "ytd") target = y + "-01-01";
+    else target = (y - 1) + last.slice(4); // 1y
+    for (var i = 0; i < dates.length; i++) if (dates[i] >= target) return i;
+    return 0;
+  }
+  function slice(a) { var s = periodStartIdx(); return s > 0 ? a.slice(s) : a; }
+  function ddSeries(a) { // % decline from running peak
+    var g = 1, p = 1, out = [];
+    for (var i = 0; i < a.length; i++) { g *= 1 + a[i]; if (g > p) p = g; out.push(100 * (g / p - 1)); }
+    return out;
+  }
+  function rollTE(act) { // rolling annualized tracking error, 63d (or period length)
+    var w = Math.min(63, act.length), out = [];
+    for (var i = 0; i < act.length; i++) {
+      out.push(i < w - 1 || w < 2 ? null : 100 * stdev(act.slice(i - w + 1, i + 1)) * Math.sqrt(252));
+    }
+    return out;
+  }
+
+  // The KPI cards double as chart-view selectors: clicking a stat switches the
+  // main chart to the lens that explains it.
+  var VIEWS = {
+    "return":  { title: "Cumulative return",        sub: "vs benchmark \u00b7 TWR" },
+    "active":  { title: "Cumulative active return", sub: "portfolio \u2212 benchmark" },
+    "drawdown":{ title: "Drawdown",                 sub: "decline from running peak" },
+    "te":      { title: "Rolling tracking error",   sub: "63-day window \u00b7 annualized" }
+  };
+  var KEY_VIEW = { twr: "return", bench: "return", active: "active", te: "te", ir: "te", mdd: "drawdown" };
 
   // sector categorical palette (cool, harmonious)
   var PALETTE = ["#4F6BED", "#1F97A6", "#6E62C7", "#3FA06A", "#C98A3C", "#C7586A",
@@ -102,10 +141,11 @@ window.BrinsonDashboard = function (mount, opts) {
       '<div class="bx-controls">' +
         '<select class="bx-select" data-pf></select>' +
         '<div class="bx-ranges" data-ranges>' +
-          '<button data-r="all" class="on">All</button>' +
-          '<button data-r="252">1Y</button>' +
-          '<button data-r="126">6M</button>' +
-          '<button data-r="63">3M</button>' +
+          '<button data-r="mtd">MTD</button>' +
+          '<button data-r="qtd">QTD</button>' +
+          '<button data-r="ytd">YTD</button>' +
+          '<button data-r="1y">1Y</button>' +
+          '<button data-r="si" class="on">SI</button>' +
         '</div>' +
         '<span class="bx-period" data-period></span>' +
         '<button class="bx-theme bx-tweaksbtn" data-tweaks-open title="Open Tweaks" style="display:none">' +
@@ -118,7 +158,7 @@ window.BrinsonDashboard = function (mount, opts) {
     '<div class="bx-body">' +
       '<div class="bx-kpis" data-kpis></div>' +
       '<section class="bx-card bx-perf">' +
-        '<div class="bx-cardhead"><h2>Cumulative return <span class="bx-sub2">vs benchmark · TWR</span></h2>' +
+        '<div class="bx-cardhead"><h2><span data-perftitle>Cumulative return</span> <span class="bx-sub2" data-perfsub>vs benchmark · TWR</span></h2>' +
           '<div class="bx-head-right"><div class="bx-legend" data-perflegend></div>' + EXPAND("perf") + '</div></div>' +
         '<div class="bx-chartwrap"><canvas data-perf></canvas></div>' +
       '</section>' +
@@ -134,8 +174,10 @@ window.BrinsonDashboard = function (mount, opts) {
             '<div class="bx-chartwrap bx-contrib-wrap"><canvas data-contrib></canvas></div>' +
           '</section>' +
           '<section class="bx-card">' +
-            '<div class="bx-cardhead"><h2>Sector weights <span class="bx-sub2">weekly</span></h2>' +
-              '<div class="bx-head-right"><div class="bx-legend" data-wtslegend style="flex-wrap:wrap;max-width:300px;justify-content:flex-end"></div>' + EXPAND("wts") + '</div></div>' +
+            '<div class="bx-cardhead"><h2>Sector weights <span class="bx-sub2" data-wtssub>weekly</span></h2>' +
+              '<div class="bx-head-right"><div class="bx-ranges bx-mini" data-wtsmode>' +
+                '<button data-m="w" class="on">Weights</button><button data-m="a">Active</button></div>' +
+                '<div class="bx-legend" data-wtslegend style="flex-wrap:wrap;max-width:300px;justify-content:flex-end"></div>' + EXPAND("wts") + '</div></div>' +
             '<div class="bx-chartwrap bx-wts-wrap"><canvas data-wts></canvas></div>' +
           '</section>' +
         '</div>' +
@@ -174,15 +216,15 @@ window.BrinsonDashboard = function (mount, opts) {
     var act = rp.map(function (x, i) { return x - rb[i]; });
     var cp = cum(rp), cb = cum(rb);
     var twr = cp[cp.length - 1], btwr = cb[cb.length - 1];
-    var te = stdev(act) * Math.sqrt(252);
+    var te = act.length > 1 ? stdev(act) * Math.sqrt(252) : null;
     var ir = te > 0 ? mean(act) * 252 / te : null;
     return {
-      dates: dates, cp: cp, cb: cb,
+      dates: dates, cp: cp, cb: cb, act: act, rpS: rp,
       list: [
         { key: "twr", k: "Total return", v: fmtPct(twr), signed: true, raw: twr },
         { key: "bench", k: "Benchmark", v: fmtPct(btwr), signed: true, raw: btwr },
         { key: "active", k: "Active", v: fmtPct(twr - btwr), signed: true, raw: twr - btwr },
-        { key: "te", k: "Tracking error", v: fmtPct(te), signed: false, raw: te },
+        { key: "te", k: "Tracking error", v: te == null ? "n/a" : fmtPct(te), signed: false, raw: te },
         { key: "ir", k: "Info ratio", v: ir == null ? "n/a" : ir.toFixed(2), signed: true, raw: ir },
         { key: "mdd", k: "Max drawdown", v: fmtPct(maxDd(rp)), signed: true, raw: maxDd(rp) }
       ]
@@ -224,8 +266,11 @@ window.BrinsonDashboard = function (mount, opts) {
     box.querySelectorAll(".kpi").forEach(function (el) {
       el.addEventListener("click", function () {
         var key = el.getAttribute("data-key");
-        if (key === state.hero) return;
-        state.hero = key; render();
+        var view = KEY_VIEW[key] || "return";
+        if (key === state.hero && view === state.view) return;
+        state.hero = key;
+        state.view = view;
+        render();
       });
     });
   }
@@ -277,32 +322,53 @@ window.BrinsonDashboard = function (mount, opts) {
   };
 
   function perfCfg(model) {
-    var accent = tok("--accent"), muted = tok("--faint"), fillStudio = state.areaFill;
+    var accent = tok("--accent"), muted = tok("--faint"), down = tok("--down");
+    var fillStudio = state.areaFill;
     var tension = state.variant === "studio" ? 0.28 : 0;
     var lw = state.lineWeight != null ? state.lineWeight : (state.variant === "desk" ? 1.75 : (state.variant === "ledger" ? 2.25 : 2.5));
+    function area(hex, a) { return hexA(hex.startsWith("#") ? hex : "#1f97a6", a); }
+    var datasets;
+    if (state.view === "active") {
+      datasets = [{ label: "Active", data: model.cp.map(function (x, i) { return 100 * (x - model.cb[i]); }),
+        borderColor: accent, backgroundColor: fillStudio ? area(accent, 0.12) : "transparent",
+        fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension }];
+    } else if (state.view === "drawdown") {
+      datasets = [{ label: "Drawdown", data: ddSeries(model.rpS),
+        borderColor: down, backgroundColor: area(down, 0.14),
+        fill: true, pointRadius: 0, borderWidth: lw, tension: tension }];
+    } else if (state.view === "te") {
+      datasets = [{ label: "Tracking error", data: rollTE(model.act),
+        borderColor: accent, backgroundColor: fillStudio ? area(accent, 0.12) : "transparent",
+        fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension, spanGaps: false }];
+    } else {
+      datasets = [
+        { label: "Portfolio", data: model.cp.map(function (x) { return 100 * x; }), borderColor: accent, backgroundColor: fillStudio ? area(accent, 0.12) : "transparent", fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension },
+        { label: "Benchmark", data: model.cb.map(function (x) { return 100 * x; }), borderColor: muted, borderDash: state.variant === "ledger" ? [4, 3] : [], pointRadius: 0, borderWidth: state.variant === "desk" ? 1.25 : 1.5, tension: tension }
+      ];
+    }
     return {
       type: "line",
       plugins: [bxCrosshair],
-      data: {
-        labels: model.dates,
-        datasets: [
-          { label: "Portfolio", data: model.cp.map(function (x) { return 100 * x; }), borderColor: accent, backgroundColor: fillStudio ? hexA(accent.startsWith("#") ? accent : "#1f97a6", 0.12) : "transparent", fill: fillStudio, pointRadius: 0, borderWidth: lw, tension: tension },
-          { label: "Benchmark", data: model.cb.map(function (x) { return 100 * x; }), borderColor: muted, borderDash: state.variant === "ledger" ? [4, 3] : [], pointRadius: 0, borderWidth: state.variant === "desk" ? 1.25 : 1.5, tension: tension }
-        ]
-      },
+      data: { labels: model.dates, datasets: datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: function (c) { return c.dataset.label + "  " + (c.raw >= 0 ? "+" : "") + c.raw.toFixed(2) + "%"; } } }) },
+        plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: function (c) { return c.dataset.label + "  " + (c.raw >= 0 ? "+" : "") + (+c.raw).toFixed(2) + "%"; } } }) },
         scales: baseScales({ y: { ticks: { callback: function (v) { return v + "%"; } } } })
       }
     };
   }
   function perfLegend() {
+    if (state.view === "active") return '<span><i style="background:' + tok("--accent") + '"></i>Active</span>';
+    if (state.view === "drawdown") return '<span><i style="background:' + tok("--down") + '"></i>Drawdown</span>';
+    if (state.view === "te") return '<span><i style="background:' + tok("--accent") + '"></i>TE (ann.)</span>';
     return '<span><i style="background:' + tok("--accent") + '"></i>Portfolio</span>' +
       '<span><i style="background:' + tok("--faint") + '"></i>Benchmark</span>';
   }
   function renderPerf(model) {
+    var v = VIEWS[state.view] || VIEWS["return"];
+    root.querySelector("[data-perftitle]").textContent = v.title;
+    root.querySelector("[data-perfsub]").textContent = v.sub;
     root.querySelector("[data-perflegend]").innerHTML = perfLegend();
     mk("perf", perfCfg(model));
   }
@@ -370,6 +436,14 @@ window.BrinsonDashboard = function (mount, opts) {
   }
   function renderWeights() {
     var p = D.portfolios[state.pf];
+    var sub = root.querySelector("[data-wtssub]");
+    if (state.wts === "a") { // average active weight needs only the attribution block
+      sub.textContent = "avg active vs benchmark";
+      root.querySelector("[data-wtslegend]").innerHTML = "";
+      mk("wts", wtsCfg());
+      return;
+    }
+    sub.textContent = "weekly";
     if (!p.weights) { // matrix arrives after first paint in split-API mode
       root.querySelector("[data-wtslegend]").innerHTML = "";
       if (charts.wts) { charts.wts.destroy(); delete charts.wts; }
@@ -380,6 +454,25 @@ window.BrinsonDashboard = function (mount, opts) {
   }
   function wtsCfg() {
     var p = D.portfolios[state.pf];
+    if (state.wts === "a") {
+      var up = tok("--up"), down = tok("--down");
+      var rows = D.sectors.map(function (s, i) {
+        var a = p.attribution[i];
+        return { label: shortSec(i), v: 100 * (a.wp - a.wb) };
+      }).sort(function (x, y) { return y.v - x.v; });
+      return {
+        type: "bar",
+        data: { labels: rows.map(function (r) { return r.label; }),
+          datasets: [{ data: rows.map(function (r) { return r.v; }),
+            backgroundColor: rows.map(function (r) { return r.v >= 0 ? up : down; }),
+            borderRadius: state.variant === "studio" ? 3 : 1, barPercentage: 0.78 }] },
+        options: {
+          indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: function (c) { return (c.raw >= 0 ? "+" : "") + (+c.raw).toFixed(1) + " pp vs benchmark"; } } }) },
+          scales: baseScales({ x: { ticks: { callback: function (v) { return v + "pp"; } } }, y: { ticks: { font: { family: "IBM Plex Mono", size: TICK_Y } } } })
+        }
+      };
+    }
     return {
       type: "line",
       data: {
@@ -437,7 +530,7 @@ window.BrinsonDashboard = function (mount, opts) {
     else if (key === "wf") { var rows = attributionRows(); cfg = wfCfg(rows); renderTable(rows, body.querySelector("[data-modal-table]")); }
     else if (key === "contrib") cfg = contribCfg();
     else {
-      if (!D.portfolios[state.pf].weights) { return; }
+      if (state.wts !== "a" && !D.portfolios[state.pf].weights) { return; }
       cfg = wtsCfg();
     }
     destroyModalCharts();
@@ -447,8 +540,11 @@ window.BrinsonDashboard = function (mount, opts) {
     if (state.fit !== "scroll" || !PANELS[key]) return;
     modalKey = key;
     var ov = root.querySelector("[data-modal]");
-    ov.querySelector("[data-modal-title]").textContent = PANELS[key].title;
-    ov.querySelector("[data-modal-sub]").textContent = PANELS[key].sub;
+    var meta = key === "perf" ? VIEWS[state.view]
+      : key === "wts" && state.wts === "a" ? { title: "Active sector weights", sub: "average wp \u2212 wb \u00b7 full period" }
+      : PANELS[key];
+    ov.querySelector("[data-modal-title]").textContent = meta.title;
+    ov.querySelector("[data-modal-sub]").textContent = meta.sub;
     ov.classList.add("on");
     document.body.style.overflow = "hidden";
     buildModalBody(key);
@@ -472,6 +568,14 @@ window.BrinsonDashboard = function (mount, opts) {
     root.querySelectorAll("[data-ranges] button").forEach(function (x) { x.classList.remove("on"); });
     b.classList.add("on");
     render();
+  });
+  root.querySelector("[data-wtsmode]").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    state.wts = b.getAttribute("data-m");
+    root.querySelectorAll("[data-wtsmode] button").forEach(function (x) { x.classList.remove("on"); });
+    b.classList.add("on");
+    renderWeights();
+    if (modalKey === "wts") buildModalBody("wts");
   });
   root.querySelector("[data-theme-toggle]").addEventListener("click", function () {
     state.theme = state.theme === "dark" ? "light" : "dark";
