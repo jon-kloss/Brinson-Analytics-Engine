@@ -79,6 +79,16 @@ if (override) {
 attempt
   .then(function (d) {
     window.BRINSON_DATA = d;
+    // Refetch the picker and select portfolio `id` (used by upload and builder).
+    function jumpTo(id) {
+      return getJson(liveBase + "api/portfolios").then(function (list) {
+        var loaded = {};
+        d.portfolios.forEach(function (p) { if (p.rp) loaded[p.id] = p; });
+        d.portfolios = list.map(function (s) { return loaded[s.id] || s; });
+        var idx = d.portfolios.map(function (p) { return p.id; }).indexOf(id);
+        return d.__loadPf(idx).then(function () { dash.setPortfolios(idx); });
+      });
+    }
     dash = window.BrinsonDashboard(document.getElementById("stage"), {
       variant: "studio",
       theme: "dark",
@@ -95,6 +105,20 @@ attempt
       areaFill: true,
       gridLines: "full",
       ensurePortfolio: d.__loadPf || null,
+      // Builder is a live-backend capability: the pick list, then POST the model
+      // spec; the server compiles + validates it and rebuilds the payloads.
+      listSecurities: liveBase === null ? null : function () {
+        return getJson(liveBase + "api/securities");
+      },
+      onBuildModel: liveBase === null ? null : function (name, rebalance, lines) {
+        return fetch(liveBase + "api/model?name=" + encodeURIComponent(name) +
+            "&rebalance=" + encodeURIComponent(rebalance),
+          { method: "POST", headers: { "Content-Type": "text/plain" }, body: lines })
+          .then(function (r) {
+            return r.text().then(function (t) { if (!r.ok) throw new Error(t); return JSON.parse(t); });
+          })
+          .then(function (res) { return jumpTo(res.id); });
+      },
       // Upload is a live-backend capability: POST the CSV, refetch the picker,
       // and jump to the newly imported portfolio.
       onUpload: liveBase === null ? null : function (file) {
@@ -105,13 +129,7 @@ attempt
         }).then(function (r) {
           return r.text().then(function (t) { if (!r.ok) throw new Error(t); return JSON.parse(t); });
         }).then(function (res) {
-          return getJson(liveBase + "api/portfolios").then(function (list) {
-            var loaded = {};
-            d.portfolios.forEach(function (p) { if (p.rp) loaded[p.id] = p; });
-            d.portfolios = list.map(function (s) { return loaded[s.id] || s; });
-            var idx = d.portfolios.map(function (p) { return p.id; }).indexOf(res.id);
-            return d.__loadPf(idx).then(function () { dash.setPortfolios(idx); });
-          });
+          return jumpTo(res.id);
         }).catch(function (e) { alert("Upload failed:\n" + e.message); });
       }
     });

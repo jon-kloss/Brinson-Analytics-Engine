@@ -76,6 +76,8 @@ class DashboardJson(
     val portfolioCore: Map<Int, String>,
     /** Per-portfolio weights piece: {"wstart":N,"weights":[[...],...]} */
     val portfolioWeights: Map<Int, String>,
+    /** Model-eligible securities for the builder picker: [{"t":..,"s":..}] */
+    val securitiesJson: String,
 ) {
     val marketJson: String = "{" + sharedFields + "}"
     val portfoliosJson: String = "[" + stubs.joinToString(",") + "]"
@@ -190,8 +192,12 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
             list.joinToString(",") {
                 "{\"t\":${jsonString(it.ticker)},\"s\":${jsonString(it.sector)},\"c\":${num(it.contribution)}}"
             }
-        pb.append("\"top\":[").append(contribJson(contribs.take(8))).append("],")
-        pb.append("\"bottom\":[").append(contribJson(contribs.takeLast(5).reversed())).append("]}")
+        // Bottom excludes anything already in top: a model holding fewer than 13
+        // securities must not list the same ticker twice.
+        val topContribs = contribs.take(8)
+        val bottomContribs = contribs.drop(topContribs.size).takeLast(5).reversed()
+        pb.append("\"top\":[").append(contribJson(topContribs)).append("],")
+        pb.append("\"bottom\":[").append(contribJson(bottomContribs)).append("]}")
         cores[pf] = pb.toString()
         // Weekly samples restricted to the portfolio's window; wstart anchors them.
         val weeks = weekIdx.withIndex().filter { (_, idx) -> idx in first..last }
@@ -205,5 +211,9 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
     val stubs = byPf.keys.map { pf ->
         "{\"id\":$pf,\"name\":${jsonString(names[pf] ?: "Portfolio $pf")}}"
     }
-    return DashboardJson(sharedFields, stubs, cores, weightPieces)
+    // The builder's pick list: ticker + sector for every model-eligible security.
+    val securitiesJson = "[" + etl.eligibleSecurities(conn).joinToString(",") { (t, s) ->
+        "{\"t\":${jsonString(t)},\"s\":${jsonString(SECTOR_SHORT[s] ?: s)}}"
+    } + "]"
+    return DashboardJson(sharedFields, stubs, cores, weightPieces, securitiesJson)
 }

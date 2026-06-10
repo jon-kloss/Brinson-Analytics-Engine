@@ -159,6 +159,8 @@ window.BrinsonDashboard = function (mount, opts) {
         '<button class="bx-theme" data-upload title="Upload portfolio CSV" style="display:none">' +
           '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5M2 12h10"/></svg></button>' +
         '<input type="file" accept=".csv,text/csv" data-uploadinput style="display:none">' +
+        '<button class="bx-theme" data-buildbtn title="Build a model portfolio" style="display:none">' +
+          '<svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="5.7"/><path d="M7 4.5v5M4.5 7h5"/></svg></button>' +
         '<a class="bx-theme" href="guide.html" title="How this dashboard works" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">?</a>' +
       '</div>' +
     '</header>' +
@@ -198,7 +200,35 @@ window.BrinsonDashboard = function (mount, opts) {
         '</div>' +
         '<div class="bx-modal-body" data-modal-body></div>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+    '<div class="bx-modal" data-mbuild>' +
+      '<div class="bx-modal-card bx-build-card">' +
+        '<div class="bx-modal-head">' +
+          '<div><h2>Model portfolio builder</h2><span class="bx-sub2">target weights · self-financing rebalance sized at the prior close</span></div>' +
+          '<button class="bx-modal-x" data-mbuild-close aria-label="Close">✕</button>' +
+        '</div>' +
+        '<div class="bx-modal-body bx-build">' +
+          '<div class="bx-build-top">' +
+            '<input class="bx-binput" data-bname placeholder="Model name" maxlength="60">' +
+            '<div class="bx-ranges bx-mini" data-brebal>' +
+              '<button data-f="monthly" class="on">Monthly</button>' +
+              '<button data-f="quarterly">Quarterly</button>' +
+              '<button data-f="none">Buy &amp; hold</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="bx-build-head"><span>Ticker</span><span>Sector</span><span>Weight %</span><span></span></div>' +
+          '<div class="bx-build-list" data-blist></div>' +
+          '<div class="bx-build-actions">' +
+            '<button class="bx-bbtn" data-badd>+ Add holding</button>' +
+            '<button class="bx-bbtn" data-bequal>Equal weights</button>' +
+            '<span class="bx-build-sum" data-bsum></span>' +
+          '</div>' +
+          '<div class="bx-build-err" data-berr></div>' +
+          '<button class="bx-bbtn bx-bbtn-primary" data-bcreate>Create portfolio</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<datalist data-bsecs></datalist>';
 
   mount.appendChild(root);
 
@@ -682,6 +712,131 @@ window.BrinsonDashboard = function (mount, opts) {
       upInput.value = "";
     });
   }
+
+  // ── model portfolio builder (live backend only) ───────────────────────
+  // Front-office "model-based investing": pick securities, set target weights,
+  // and the backend compiles a rebalanced model the attribution engine reports
+  // on like any other portfolio.
+  var bOv = root.querySelector("[data-mbuild]");
+  function bClose() { bOv.classList.remove("on"); document.body.style.overflow = ""; }
+  if (opts.onBuildModel && opts.listSecurities) {
+    var bBtn = root.querySelector("[data-buildbtn]");
+    var bList = root.querySelector("[data-blist]");
+    var bCreate = root.querySelector("[data-bcreate]");
+    var secs = null; // UPPERCASED ticker -> {t: canonical ticker, s: sector}
+    var bRebal = "monthly";
+    var secsId = "bx-secs-" + Math.random().toString(36).slice(2, 8);
+    root.querySelector("[data-bsecs]").id = secsId;
+    bBtn.style.display = "";
+
+    function bRow(t, w) {
+      var div = document.createElement("div");
+      div.className = "bx-build-h";
+      div.innerHTML = '<input class="bx-binput" list="' + secsId + '" data-bt placeholder="Ticker" autocomplete="off" spellcheck="false">' +
+        '<span class="bx-build-sec" data-bsec></span>' +
+        '<input class="bx-binput" type="number" data-bw min="0" max="100" step="0.5" placeholder="0">' +
+        '<button class="bx-build-del" data-bdel aria-label="Remove holding">✕</button>';
+      if (t) div.querySelector("[data-bt]").value = t;
+      if (w != null) div.querySelector("[data-bw]").value = w;
+      bList.appendChild(div);
+    }
+    function bRows() { return Array.prototype.slice.call(bList.querySelectorAll(".bx-build-h")); }
+    function bSec(t) { return secs && secs[t.toUpperCase()]; }
+    function bRefresh() {
+      var sum = 0;
+      bRows().forEach(function (row) {
+        var t = row.querySelector("[data-bt]").value.trim();
+        var hit = t && bSec(t);
+        row.querySelector("[data-bsec]").textContent = hit ? hit.s : (t && secs ? "unknown ticker" : "");
+        var w = parseFloat(row.querySelector("[data-bw]").value);
+        if (w > 0) sum += w;
+      });
+      var el = root.querySelector("[data-bsum]");
+      el.textContent = "Total " + (Math.round(sum * 100) / 100) + "%";
+      el.className = "bx-build-sum" + (Math.abs(sum - 100) < 0.05 ? " ok" : "");
+    }
+    function bError(msg) { root.querySelector("[data-berr]").textContent = msg || ""; }
+    bBtn.addEventListener("click", function () {
+      bOv.classList.add("on");
+      document.body.style.overflow = "hidden";
+      bError("");
+      if (bList.children.length === 0) { bRow(); bRow(); bRow(); }
+      if (!secs) {
+        opts.listSecurities().then(function (list) {
+          secs = {};
+          var dl = document.getElementById(secsId);
+          list.forEach(function (x) {
+            secs[x.t.toUpperCase()] = x;
+            var o = document.createElement("option");
+            o.value = x.t;
+            o.label = x.s;
+            dl.appendChild(o);
+          });
+          bRefresh();
+        }).catch(function () { bError("Couldn't load the security list."); });
+      }
+      bRefresh();
+    });
+    bOv.addEventListener("click", function (e) {
+      if (e.target === bOv || e.target.closest("[data-mbuild-close]")) bClose();
+      var del = e.target.closest("[data-bdel]");
+      if (del) { del.parentNode.remove(); bRefresh(); }
+    });
+    bList.addEventListener("input", function () { bError(""); bRefresh(); });
+    root.querySelector("[data-badd]").addEventListener("click", function () { bRow(); });
+    root.querySelector("[data-bequal]").addEventListener("click", function () {
+      var rows = bRows().filter(function (r) { return r.querySelector("[data-bt]").value.trim(); });
+      if (!rows.length) return;
+      var each = Math.floor(10000 / rows.length) / 100;
+      rows.forEach(function (r, i) { // first row absorbs the rounding remainder
+        r.querySelector("[data-bw]").value =
+          i === 0 ? Math.round((100 - each * (rows.length - 1)) * 100) / 100 : each;
+      });
+      bRefresh();
+    });
+    root.querySelector("[data-brebal]").addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      bRebal = b.getAttribute("data-f");
+      root.querySelectorAll("[data-brebal] button").forEach(function (x) { x.classList.remove("on"); });
+      b.classList.add("on");
+    });
+    bCreate.addEventListener("click", function () {
+      var rows = bRows().map(function (r) {
+        return { t: r.querySelector("[data-bt]").value.trim(), w: parseFloat(r.querySelector("[data-bw]").value) };
+      }).filter(function (h) { return h.t || h.w > 0; });
+      if (!rows.length) return bError("Add at least one holding.");
+      var seen = {}, sum = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var h = rows[i];
+        if (!h.t || !(h.w > 0)) return bError("Every holding needs a ticker and a positive weight.");
+        var hit = bSec(h.t);
+        if (secs && !hit) return bError("Unknown ticker: " + h.t);
+        if (hit) h.t = hit.t; // canonical casing
+        if (seen[h.t]) return bError("Duplicate ticker: " + h.t);
+        seen[h.t] = 1;
+        sum += h.w;
+      }
+      if (Math.abs(sum - 100) > 0.05) {
+        return bError("Weights must total 100% (now " + Math.round(sum * 100) / 100 + "%).");
+      }
+      bError("");
+      var name = root.querySelector("[data-bname]").value.trim() || "Model portfolio";
+      var lines = rows.map(function (h) { return h.t + "," + h.w; }).join("\n");
+      bCreate.disabled = true;
+      bCreate.textContent = "Building…";
+      opts.onBuildModel(name, bRebal, lines).then(function () {
+        bCreate.disabled = false;
+        bCreate.textContent = "Create portfolio";
+        bClose();
+        bList.innerHTML = "";
+        root.querySelector("[data-bname]").value = "";
+      }).catch(function (err) {
+        bCreate.disabled = false;
+        bCreate.textContent = "Create portfolio";
+        bError((err && err.message) || "Build failed.");
+      });
+    });
+  }
   root.addEventListener("click", function (e) {
     var ex = e.target.closest("[data-expand]");
     if (ex) { openPanel(ex.getAttribute("data-expand")); }
@@ -690,7 +845,12 @@ window.BrinsonDashboard = function (mount, opts) {
   ov.addEventListener("click", function (e) {
     if (e.target === ov || e.target.closest("[data-modal-close]")) closePanel();
   });
-  function onKey(e) { if (e.key === "Escape" && modalKey) closePanel(); }
+  function onKey(e) {
+    if (e.key !== "Escape") return;
+    if (modalKey) closePanel();
+    var b = root.querySelector("[data-mbuild]");
+    if (b && b.classList.contains("on")) { b.classList.remove("on"); document.body.style.overflow = ""; }
+  }
   document.addEventListener("keydown", onKey);
 
   applyStyle();

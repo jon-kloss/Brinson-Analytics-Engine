@@ -22,6 +22,9 @@ import java.util.zip.GZIPOutputStream
  *   GET /api/portfolio/{id}/weights  the weights matrix — 60% of a portfolio's
  *                                    bytes feeding one below-the-fold chart,
  *                                    so it loads after first paint
+ *   GET /api/securities              model-eligible tickers for the builder picker
+ *   POST /api/model?name=&rebalance= body lines "TICKER,WEIGHT" — builds a model
+ *                                    portfolio (target weights, prior-close rebalance)
  *   GET /api/data | /data.json       the full document (bulk / static parity)
  *   GET /healthz                     liveness probe
  *   GET /                            the dashboard (same bundled assets as Pages)
@@ -49,6 +52,7 @@ fun serve(dbPath: Path, port: Int, echo: (String) -> Unit) {
         val portfolios = jsonPayload(parts.portfoliosJson)
         val cores = parts.portfolioCore.mapValues { (_, v) -> jsonPayload(v) }
         val weights = parts.portfolioWeights.mapValues { (_, v) -> jsonPayload(v) }
+        val securities = jsonPayload(parts.securitiesJson)
         val full = jsonPayload(parts.fullJson())
     }
 
@@ -127,6 +131,46 @@ fun serve(dbPath: Path, port: Int, echo: (String) -> Unit) {
                     ex.respond(500, Payload(("import failed: " + (e.message ?: e.toString())).toByteArray(), "text/plain"))
                 }
             }
+            path == "api/model" && ex.requestMethod == "POST" -> {
+                val q = (ex.requestURI.rawQuery ?: "").split("&")
+                fun param(k: String) = q.firstOrNull { it.startsWith("$k=") }
+                    ?.let { java.net.URLDecoder.decode(it.removePrefix("$k="), Charsets.UTF_8) }
+                    ?.takeIf { it.isNotBlank() }
+                val name = param("name") ?: "Model portfolio"
+                try {
+                    val freq = (param("rebalance") ?: "monthly").let { r ->
+                        etl.Rebalance.entries.firstOrNull { it.name.equals(r, ignoreCase = true) }
+                            ?: throw IllegalArgumentException("bad rebalance '$r' — use none, monthly, or quarterly")
+                    }
+                    // Body: one "TICKER,WEIGHT" per line (weights as fractions or percents).
+                    val holdings = ex.requestBody.readNBytes(64 shl 10).toString(Charsets.UTF_8)
+                        .lines().map { it.trim() }.filter { it.isNotEmpty() }
+                        .map { line ->
+                            val parts = line.split(",")
+                            require(parts.size == 2 && parts[1].trim().toDoubleOrNull() != null) {
+                                "bad holding line '$line' — expected TICKER,WEIGHT"
+                            }
+                            parts[0].trim() to parts[1].trim().toDouble()
+                        }
+                    val result = etl.openDatabase(dbPath).use { conn: Connection ->
+                        etl.buildModelPortfolio(conn, name.take(80), holdings, freq)
+                    }
+                    snap = rebuild()
+                    echo("Built model '${result.name}' as portfolio ${result.portfolioId} (${result.tickers} holdings); payloads rebuilt")
+                    ex.respond(
+                        201,
+                        jsonPayload(
+                            "{\"id\":${result.portfolioId},\"name\":${'"'}${result.name.replace("\\", "").replace("\"", "")}${'"'}," +
+                                "\"rows\":${result.positionRows},\"holdings\":${result.tickers}}",
+                        ),
+                    )
+                } catch (e: IllegalArgumentException) {
+                    ex.respond(400, Payload(("model rejected: " + (e.message ?: "invalid request")).toByteArray(), "text/plain"))
+                } catch (e: Exception) {
+                    ex.respond(500, Payload(("model failed: " + (e.message ?: e.toString())).toByteArray(), "text/plain"))
+                }
+            }
+            path == "api/securities" -> ex.respond(200, snap.securities)
             path == "api/portfolios" -> ex.respond(200, snap.portfolios)
             path == "api/market" -> ex.respond(200, snap.market)
             path.startsWith("api/portfolio/") -> {
