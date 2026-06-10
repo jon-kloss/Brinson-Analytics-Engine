@@ -421,7 +421,12 @@ window.BrinsonDashboard = function (mount, opts) {
   }
 
   // ── events ────────────────────────────────────────────────────────────
-  sel.addEventListener("change", function () { state.pf = parseInt(sel.value, 10); render(); });
+  sel.addEventListener("change", function () {
+    var v = parseInt(sel.value, 10);
+    var ready = opts.ensurePortfolio ? opts.ensurePortfolio(v) : null;
+    if (ready && ready.then) { ready.then(function () { state.pf = v; render(); }); }
+    else { state.pf = v; render(); }
+  });
   root.querySelector("[data-ranges]").addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
     state.range = b.getAttribute("data-r");

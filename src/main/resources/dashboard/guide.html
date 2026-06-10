@@ -136,7 +136,10 @@
   benchmark series), the <b>full-period Cariño-linked attribution</b> by sector, top/bottom
   <b>contributors</b>, and <b>weekly sector weights</b>. Daily series are what let the range
   buttons recompute returns and risk client-side; attribution stays full-period because
-  recomputing it for arbitrary ranges would need the per-day×sector effect matrix (~30&nbsp;MB).</p>
+  recomputing it for arbitrary ranges would need the per-day×sector effect matrix (~30&nbsp;MB).
+  Against the live backend the same payloads are served <b>granularly</b> —
+  <code>/api/meta</code> plus <code>/api/portfolio/{id}</code> — so the browser downloads
+  ~34&nbsp;KB up front and ~20&nbsp;KB per portfolio switch instead of the 1&nbsp;MB document.</p>
 </section>
 
 <section id="twr">

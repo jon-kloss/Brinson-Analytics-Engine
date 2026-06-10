@@ -17,6 +17,8 @@ import kotlin.io.path.deleteRecursively
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ServeTest {
 
@@ -49,6 +51,20 @@ class ServeTest {
             assertContains(api.body(), "\"portfolios\"")
             // /data.json aliases the live payload, so the static bootstrap path stays live.
             assertEquals(api.body(), get("/data.json").body())
+
+            // Granular endpoints: meta carries stubs, detail carries the series; the
+            // full document is exactly meta's shared prefix spliced with all details.
+            val meta = get("/api/meta")
+            assertEquals(200, meta.statusCode())
+            assertContains(meta.body(), "\"name\"")
+            assertFalse(meta.body().contains("\"rp\""), "meta must not carry portfolio series")
+            assertTrue(meta.body().length < api.body().length / 2, "meta should be much smaller than full")
+            val p1 = get("/api/portfolio/1")
+            assertEquals(200, p1.statusCode())
+            assertContains(p1.body(), "\"rp\"")
+            assertContains(api.body(), p1.body(), message = "full document must embed the portfolio detail")
+            assertEquals(404, get("/api/portfolio/999").statusCode())
+            assertEquals(404, get("/api/portfolio/x").statusCode())
 
             val index = get("/")
             assertEquals(200, index.statusCode())

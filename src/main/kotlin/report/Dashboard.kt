@@ -16,7 +16,7 @@ import queries.securityContributions
  * Bakes every portfolio's performance, Cariño-linked attribution, risk metrics,
  * contributors, and weekly sector weights into a self-contained static site
  * suitable for GitHub Pages: data.json (built here) plus the design assets
- * (index.html, styles.css, dashboard.js) bundled as classpath resources.
+ * (index.html, styles.css, dashboard.js, guide.html) bundled as classpath resources.
  *
  * Date-range presets, theme, hero KPI, and expand-to-modal interactions all run
  * client-side in dashboard.js against the baked daily return series, using the
@@ -51,7 +51,26 @@ private val SECTOR_SHORT = mapOf(
     "Consumer Staples" to "Cons. Staples",
 )
 
-fun buildDashboardJson(conn: Connection): String {
+/**
+ * The dashboard payload split into servable pieces (see `serve`):
+ * shared metadata with portfolio stubs, per-portfolio detail documents, and the
+ * assembled full document (the static data.json).
+ */
+class DashboardJson(
+    private val sharedPrefix: String,
+    private val stubs: List<String>,
+    val portfolioJson: Map<Int, String>,
+) {
+    /** Everything shared plus a light portfolio list of {id, name} stubs. */
+    val metaJson: String = sharedPrefix + stubs.joinToString(",") + "]}"
+
+    /** The complete document: identical to what the static bake ships. */
+    fun fullJson(): String = sharedPrefix + portfolioJson.values.joinToString(",") + "]}"
+}
+
+fun buildDashboardJson(conn: Connection): String = buildDashboardParts(conn).fullJson()
+
+fun buildDashboardParts(conn: Connection): DashboardJson {
     val (from, to) = conn.createStatement().use { st ->
         st.executeQuery("SELECT min(date), max(date) FROM benchmark_returns").use { rs ->
             rs.next()
@@ -75,7 +94,7 @@ fun buildDashboardJson(conn: Connection): String {
     val rb = DoubleArray(dates.size)
     for (r in byPf.values.first()) rb[dateIndex.getValue(r.date)] = r.rbTotal
 
-    // Weekly sampling for the sector-weight area chart keeps data.json small.
+    // Weekly sampling for the sector-weight area chart keeps payloads small.
     val weekIdx = dates.indices.step(5).toList()
 
     val sb = StringBuilder()
@@ -88,8 +107,10 @@ fun buildDashboardJson(conn: Connection): String {
     sb.append("\"weekIdx\":[").append(weekIdx.joinToString(",")).append("],")
     sb.append("\"rb\":[").append(rb.joinToString(",") { num(it) }).append("],")
     sb.append("\"portfolios\":[")
+    val sharedPrefix = sb.toString()
 
-    byPf.entries.forEachIndexed { pfIdx, (pf, rows) ->
+    val pieces = LinkedHashMap<Int, String>()
+    for ((pf, rows) in byPf) {
         val byDate = rows.groupBy { it.date }.toSortedMap()
         val rp = DoubleArray(dates.size)
         // wp per sector per date, for the weekly weight chart.
@@ -104,38 +125,42 @@ fun buildDashboardJson(conn: Connection): String {
         val active = rp.zip(rb.asList()) { p, b -> p - b }
         val contribs = securityContributions(conn, pf, from, to)
 
-        if (pfIdx > 0) sb.append(",")
-        sb.append("{\"id\":$pf,\"name\":${jsonString(names[pf] ?: "Portfolio $pf")},")
-        sb.append("\"rp\":[").append(rp.joinToString(",") { num(it) }).append("],")
-        sb.append("\"risk\":{")
-        sb.append("\"twr\":${num(linkGeometrically(rp.asList()))},")
-        sb.append("\"benchTwr\":${num(linkGeometrically(rb.asList()))},")
-        sb.append("\"te\":${num(annualizedTrackingError(active))},")
-        sb.append("\"ir\":${informationRatio(active)?.let { num(it) } ?: "null"},")
-        sb.append("\"maxDd\":${num(maxDrawdown(rp.asList()))}},")
-        sb.append("\"attribution\":[")
-        sb.append(
+        val pb = StringBuilder()
+        pb.append("{\"id\":$pf,\"name\":${jsonString(names[pf] ?: "Portfolio $pf")},")
+        pb.append("\"rp\":[").append(rp.joinToString(",") { num(it) }).append("],")
+        pb.append("\"risk\":{")
+        pb.append("\"twr\":${num(linkGeometrically(rp.asList()))},")
+        pb.append("\"benchTwr\":${num(linkGeometrically(rb.asList()))},")
+        pb.append("\"te\":${num(annualizedTrackingError(active))},")
+        pb.append("\"ir\":${informationRatio(active)?.let { num(it) } ?: "null"},")
+        pb.append("\"maxDd\":${num(maxDrawdown(rp.asList()))}},")
+        pb.append("\"attribution\":[")
+        pb.append(
             sectors.joinToString(",") { s ->
                 val r = linked.getValue(s)
                 "{\"wp\":${num(r.avgPortfolioWeight)},\"wb\":${num(r.avgBenchmarkWeight)}," +
                     "\"a\":${num(r.allocation)},\"s\":${num(r.selection)},\"i\":${num(r.interaction)}}"
             },
         )
-        sb.append("],")
+        pb.append("],")
         fun contribJson(list: List<SecurityContribution>) =
             list.joinToString(",") {
                 "{\"t\":${jsonString(it.ticker)},\"s\":${jsonString(it.sector)},\"c\":${num(it.contribution)}}"
             }
-        sb.append("\"top\":[").append(contribJson(contribs.take(8))).append("],")
-        sb.append("\"bottom\":[").append(contribJson(contribs.takeLast(5).reversed())).append("],")
-        sb.append("\"weights\":[")
-        sb.append(
+        pb.append("\"top\":[").append(contribJson(contribs.take(8))).append("],")
+        pb.append("\"bottom\":[").append(contribJson(contribs.takeLast(5).reversed())).append("],")
+        pb.append("\"weights\":[")
+        pb.append(
             sectors.indices.joinToString(",") { si ->
                 "[" + weekIdx.joinToString(",") { num(wp[si][it]) } + "]"
             },
         )
-        sb.append("]}")
+        pb.append("]}")
+        pieces[pf] = pb.toString()
     }
-    sb.append("]}")
-    return sb.toString()
+
+    val stubs = byPf.keys.map { pf ->
+        "{\"id\":$pf,\"name\":${jsonString(names[pf] ?: "Portfolio $pf")}}"
+    }
+    return DashboardJson(sharedPrefix, stubs, pieces)
 }
