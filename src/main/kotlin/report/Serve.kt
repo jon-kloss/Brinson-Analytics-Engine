@@ -11,23 +11,29 @@ import java.sql.Connection
  * own HTTP server (zero dependencies, matching the repo's discipline).
  *
  * Routes:
- *   GET /                 the dashboard (same bundled assets as the static site)
- *   GET /api/data         dashboard JSON computed from the database (cached at boot)
- *   GET /data.json        alias of /api/data, so the static bootstrap path also gets live data
- *   GET /healthz          liveness probe
+ *   GET /                    the dashboard (same bundled assets as the static site)
+ *   GET /api/meta            shared data + a light portfolio list ({id, name} stubs)
+ *   GET /api/portfolio/{id}  one portfolio's series, attribution, contributors, weights
+ *   GET /api/data            the full document (all portfolios) — bulk consumers
+ *   GET /data.json           alias of /api/data, so the static bootstrap path stays live
+ *   GET /healthz             liveness probe
  *
- * The JSON is computed once at startup (the expensive part is the same single-pass
+ * Payloads are computed once at startup (the expensive part is the same single-pass
  * attribution query the bench measures) and served from memory — analytics over
  * end-of-day data don't change between batch loads, so per-request recompute would
  * buy nothing. CORS is wide open: the data is synthetic and public.
  */
 fun serve(dbPath: Path, port: Int, echo: (String) -> Unit) {
-    val json: ByteArray
     val started = System.currentTimeMillis()
-    etl.openDatabase(dbPath).use { conn: Connection ->
-        json = buildDashboardJson(conn).toByteArray(Charsets.UTF_8)
-    }
-    echo("Computed dashboard JSON in ${System.currentTimeMillis() - started} ms (%,d bytes)".fmt(json.size))
+    val parts = etl.openDatabase(dbPath).use { conn: Connection -> buildDashboardParts(conn) }
+    val meta = parts.metaJson.toByteArray(Charsets.UTF_8)
+    val full = parts.fullJson().toByteArray(Charsets.UTF_8)
+    val portfolios = parts.portfolioJson.mapValues { (_, v) -> v.toByteArray(Charsets.UTF_8) }
+    echo(
+        "Computed dashboard JSON in ${System.currentTimeMillis() - started} ms " +
+            "(meta %,d B, %,d portfolios ~%,d B each, full %,d B)"
+                .fmt(meta.size, portfolios.size, portfolios.values.first().size, full.size),
+    )
 
     val assets = listOf("index.html", "styles.css", "dashboard.js", "guide.html").associateWith { name ->
         object {}.javaClass.getResourceAsStream("/dashboard/$name")!!.use { it.readBytes() }
@@ -46,11 +52,18 @@ fun serve(dbPath: Path, port: Int, echo: (String) -> Unit) {
         responseBody.use { it.write(body) }
     }
 
+    val json = "application/json; charset=utf-8"
     val server = HttpServer.create(InetSocketAddress("0.0.0.0", port), 0)
     server.createContext("/") { ex ->
         val path = ex.requestURI.path.trimStart('/')
         when {
-            path == "api/data" || path == "data.json" -> ex.respond(200, json, "application/json; charset=utf-8")
+            path == "api/meta" -> ex.respond(200, meta, json)
+            path.startsWith("api/portfolio/") -> {
+                val body = path.removePrefix("api/portfolio/").toIntOrNull()?.let { portfolios[it] }
+                if (body != null) ex.respond(200, body, json)
+                else ex.respond(404, "unknown portfolio".toByteArray(), "text/plain")
+            }
+            path == "api/data" || path == "data.json" -> ex.respond(200, full, json)
             path == "healthz" -> ex.respond(200, "ok".toByteArray(), "text/plain")
             path.isEmpty() || path == "index.html" -> ex.respond(200, assets.getValue("index.html"), contentType("index.html"))
             assets.containsKey(path) -> ex.respond(200, assets.getValue(path), contentType(path))

@@ -27,8 +27,42 @@ directory) — browsers block <code>fetch</code> from <code>file://</code>.</div
 "use strict";
 // Production bootstrap: bake the design settings chosen in Claude Design
 // (studio variant, green accent, hero KPI layout) and feed the real data.
-fetch("data.json")
-  .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+//
+// Data source resolution, first success wins:
+//   1. ?api=<backend base url>   e.g. ?api=https://brinson.up.railway.app
+//      (a url ending in /api/data or .json is treated as a full-document fetch)
+//   2. same-origin api/meta      live backend: fetch shared meta + portfolios on demand
+//   3. data.json                 baked static file (GitHub Pages) — everything at once
+var INITIAL_PF = 6; // Portfolio 007, the README's example
+var override = (new URLSearchParams(location.search).get("api") || "").replace(/\/+$/, "");
+
+function getJson(u) {
+  return fetch(u).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+}
+
+// Split mode: small meta payload now, one portfolio at a time afterwards.
+function splitMode(base) {
+  var pre = base ? base + "/" : "";
+  return getJson(pre + "api/meta").then(function (meta) {
+    meta.__loadPf = function (i) {
+      var cur = meta.portfolios[i];
+      if (cur && cur.rp) return Promise.resolve();
+      return getJson(pre + "api/portfolio/" + cur.id).then(function (fullP) {
+        meta.portfolios[i] = fullP;
+      });
+    };
+    return meta.__loadPf(INITIAL_PF).then(function () { return meta; });
+  });
+}
+
+var attempt;
+if (override) {
+  attempt = /api\/data$|\.json$/.test(override) ? getJson(override) : splitMode(override);
+} else {
+  attempt = splitMode("").catch(function () { return getJson("data.json"); });
+}
+
+attempt
   .then(function (d) {
     window.BRINSON_DATA = d;
     window.BrinsonDashboard(document.getElementById("stage"), {
@@ -45,7 +79,8 @@ fetch("data.json")
       accent: "#3fa06a",
       lineWeight: 3,
       areaFill: true,
-      gridLines: "full"
+      gridLines: "full",
+      ensurePortfolio: d.__loadPf || null
     });
   })
   .catch(function () { document.getElementById("err").style.display = "block"; });
