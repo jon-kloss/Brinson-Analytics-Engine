@@ -96,11 +96,6 @@ window.BrinsonDashboard = function (mount, opts) {
     var r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
     return "rgba(" + r + "," + g + "," + b + "," + a + ")";
   }
-  function hexLift(h) { // palette color pushed toward white: legible text on the dark tooltip panel
-    h = h.replace("#", "");
-    function m(v) { return Math.round(v + (255 - v) * 0.35); }
-    return "rgb(" + m(parseInt(h.substr(0, 2), 16)) + "," + m(parseInt(h.substr(2, 2), 16)) + "," + m(parseInt(h.substr(4, 2), 16)) + ")";
-  }
 
   // ── DOM scaffold ──────────────────────────────────────────────────────
   var root = document.createElement("div");
@@ -189,7 +184,8 @@ window.BrinsonDashboard = function (mount, opts) {
             '<div class="bx-cardhead"><h2>Sector weights <span class="bx-sub2" data-wtssub>weekly</span></h2>' +
               '<div class="bx-head-right"><div class="bx-ranges bx-mini" data-wtsmode>' +
                 '<button data-m="w" class="on">Weights</button><button data-m="a">Active</button></div>' + EXPAND("wts") + '</div></div>' +
-            '<div class="bx-chartwrap bx-wts-wrap"><canvas data-wts></canvas></div>' +
+            '<div class="bx-chartwrap bx-wts-wrap bx-wts-flex"><div class="bx-wts-chart"><canvas data-wts></canvas></div>' +
+              '<aside class="bx-wts-read" data-wtsread></aside></div>' +
           '</section>' +
         '</div>' +
       '</div>' +
@@ -449,19 +445,47 @@ window.BrinsonDashboard = function (mount, opts) {
     };
   }
 
+  // Stack order for the weights chart: largest average weight on the bottom, so
+  // the dominant sectors form stable, labelable bands and the thin ones collect
+  // at the top. Colors stay keyed to the sector's global index.
+  function wtsOrder() {
+    var p = D.portfolios[state.pf];
+    return D.sectors.map(function (_, i) { return i; })
+      .sort(function (a, b) { return p.attribution[b].wp - p.attribution[a].wp; });
+  }
+  // The docked readout beside the weights chart: shows the latest week until a
+  // hover pins a week, then mirrors the crosshair. Rows run top-to-bottom in the
+  // same order as the visual stack. Lives outside the canvas so the values never
+  // cover the chart they describe.
+  function wtsReadout(el, weekI, hovered) {
+    var p = D.portfolios[state.pf];
+    if (!el || !p.weights) { if (el) el.innerHTML = ""; return; }
+    var i = weekI == null ? p.weights[0].length - 1 : weekI;
+    var date = D.dates[D.weekIdx[(p.wstart || 0) + i]];
+    el.innerHTML = '<span class="d">' + date + (hovered ? "" : " · latest") + "</span>" +
+      wtsOrder().reverse().map(function (si) {
+        return '<span class="r"><span class="n"><i style="background:' + PALETTE[si % PALETTE.length] + '"></i>' +
+          shortSec(si) + "</span><b>" + (100 * p.weights[si][i]).toFixed(1) + "%</b></span>";
+      }).join("");
+  }
   function renderWeights() {
     var p = D.portfolios[state.pf];
     var sub = root.querySelector("[data-wtssub]");
+    var read = root.querySelector("[data-wtsread]");
     if (state.wts === "a") { // average active weight needs only the attribution block
       sub.textContent = "avg active vs benchmark";
+      read.style.display = "none";
       mk("wts", wtsCfg());
       return;
     }
     sub.textContent = "weekly";
     if (!p.weights) { // matrix arrives after first paint in split-API mode
+      read.style.display = "none";
       if (charts.wts) { charts.wts.destroy(); delete charts.wts; }
       return;
     }
+    read.style.display = "";
+    wtsReadout(read, null);
     mk("wts", wtsCfg());
   }
   // Sector names drawn inside their own bands (sampled mid-series; the bands are
@@ -514,11 +538,6 @@ window.BrinsonDashboard = function (mount, opts) {
         }
       };
     }
-    // Largest average weight stacks at the bottom: the dominant sectors form
-    // stable, labelable bands and the thin ones collect at the top. Colors stay
-    // keyed to the sector's global index so they match across portfolios.
-    var order = D.sectors.map(function (_, i) { return i; })
-      .sort(function (a, b) { return p.attribution[b].wp - p.attribution[a].wp; });
     var seam = tok("--bg"); // hairline of page background separates the bands
     return {
       type: "line",
@@ -526,25 +545,24 @@ window.BrinsonDashboard = function (mount, opts) {
       data: {
         labels: D.weekIdx.slice(p.wstart || 0, (p.wstart || 0) + p.weights[0].length)
           .map(function (i) { return D.dates[i]; }),
-        datasets: order.map(function (si) {
+        datasets: wtsOrder().map(function (si) {
           var c = PALETTE[si % PALETTE.length];
-          return { label: shortSec(si), data: p.weights[si].map(function (w) { return 100 * w; }), borderColor: seam, backgroundColor: hexA(c, 0.7), solid: c, fill: true, pointRadius: 0, borderWidth: 1, tension: 0.2 };
+          return { label: shortSec(si), data: p.weights[si].map(function (w) { return 100 * w; }), borderColor: seam, backgroundColor: hexA(c, 0.7), fill: true, pointRadius: 0, pointHoverRadius: 0, borderWidth: 1, tension: 0.2 };
         })
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: "index", intersect: false },
-        plugins: { legend: { display: false }, tooltip: tooltipCfg({
-          displayColors: false, padding: 7,
-          titleFont: { family: "IBM Plex Mono", size: TT_TITLE - 1 },
-          bodyFont: { family: "IBM Plex Mono", size: TT_BODY - 1.5 },
-          // top-to-bottom rows mirror the visual stack; rows take their band color
-          itemSort: function (a, b) { return b.datasetIndex - a.datasetIndex; },
-          callbacks: {
-            label: function (cx) { return cx.dataset.label + "  " + (+cx.raw).toFixed(1) + "%"; },
-            labelTextColor: function (cx) { return hexLift(cx.dataset.solid); }
-          }
-        }) },
+        // An 11-row overlay tooltip would cover the very bands it describes, so
+        // the canvas tooltip is disabled and its model drives the docked readout
+        // beside the chart instead. The crosshair still marks the hovered week.
+        plugins: { legend: { display: false }, tooltip: { enabled: false, external: function (ctx) {
+          var wrap = ctx.chart.canvas.closest(".bx-wts-flex");
+          var read = wrap && wrap.querySelector("[data-wtsread]");
+          var t = ctx.tooltip;
+          if (!t || t.opacity === 0 || !t.dataPoints || !t.dataPoints.length) wtsReadout(read, null);
+          else wtsReadout(read, t.dataPoints[0].dataIndex, true);
+        } } },
         scales: baseScales({ y: { stacked: true, max: 100, ticks: { callback: function (v) { return v + "%"; }, maxTicksLimit: 4 } } })
       }
     };
@@ -580,9 +598,12 @@ window.BrinsonDashboard = function (mount, opts) {
   function buildModalBody(key) {
     var body = root.querySelector("[data-modal-body]");
     var legend = key === "perf" ? perfLegend() : "";
+    var weightsChart = key === "wts" && state.wts !== "a"; // readout docks beside it
     body.innerHTML =
       (legend ? '<div class="bx-legend bx-modal-legend">' + legend + '</div>' : "") +
-      '<div class="bx-modal-chart"><canvas data-modalcanvas></canvas></div>' +
+      (weightsChart
+        ? '<div class="bx-modal-chart bx-wts-flex"><div class="bx-wts-chart"><canvas data-modalcanvas></canvas></div><aside class="bx-wts-read" data-wtsread></aside></div>'
+        : '<div class="bx-modal-chart"><canvas data-modalcanvas></canvas></div>') +
       (key === "wf" ? '<div class="bx-modal-table" data-modal-table></div>' : "");
     var canvas = body.querySelector("[data-modalcanvas]");
     var cfg;
@@ -592,6 +613,7 @@ window.BrinsonDashboard = function (mount, opts) {
     else {
       if (state.wts !== "a" && !D.portfolios[state.pf].weights) { return; }
       cfg = wtsCfg();
+      if (weightsChart) wtsReadout(body.querySelector("[data-wtsread]"), null);
     }
     destroyModalCharts();
     modalCharts.push(new Chart(canvas, cfg));
