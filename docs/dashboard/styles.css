@@ -305,3 +305,53 @@ table.bx-tab .neg { color: var(--down); }
 .bx-modal-table table.bx-tab th { font-size: 10.5px; padding: 8px 10px; }
 .bx-modal-table table.bx-tab td { padding: 7px 10px; font-size: 12px; }
 .bx-modal-table table.bx-tab td:first-child { font-size: 13px; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────
+   The design canvas was desktop-sized; these breakpoints make the layout
+   fluid: stack the KPI hero, collapse the two-column grid, let the header
+   wrap, and give the 7-column attribution table horizontal scroll instead
+   of clipping. */
+
+@media (max-width: 1020px) {
+  .brinson[data-variant="studio"][data-kpilayout="hero"] .bx-kpis { grid-template-columns: 1fr; }
+  .brinson[data-variant="studio"][data-kpilayout="hero"] .bx-kpis .kpi-rest { grid-template-columns: repeat(3, 1fr); }
+  .brinson[data-variant="desk"] .bx-kpis,
+  .brinson[data-variant="studio"][data-kpilayout="grid"] .bx-kpis { grid-template-columns: repeat(3, 1fr); }
+  .brinson[data-variant="ledger"] .bx-kpis { grid-template-columns: 1fr; }
+  .brinson[data-variant="ledger"] .bx-kpis .kpi-rest { grid-template-columns: repeat(3, 1fr); }
+  .bx-grid2 { grid-template-columns: 1fr; }
+  .brinson[data-variant="studio"][data-kpilayout="hero"] .kpi.hero .kpi-v { font-size: 42px; }
+}
+
+@media (max-width: 760px) {
+  .bx-header { flex-wrap: wrap; gap: 10px; }
+  .brinson[data-variant="studio"] .bx-header { padding: 16px 14px 4px; }
+  .bx-controls { flex-wrap: wrap; row-gap: 8px; width: 100%; }
+  .bx-period { display: none; } /* the hero card's meta line carries the same dates */
+  .bx-body { padding: 12px 14px 20px; }
+  .brinson[data-variant="studio"] .bx-body { padding: 10px 14px 20px; }
+  .bx-cardhead { flex-wrap: wrap; row-gap: 6px; }
+  .bx-cardhead .bx-legend { flex-wrap: wrap; }
+  [data-wtslegend] { max-width: none !important; justify-content: flex-start !important; }
+  .bx-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .bx-tablewrap table.bx-tab { min-width: 460px; }
+  .bx-modal { padding: 2vh 2vw; }
+  .bx-modal-table { overflow-x: auto; }
+  .bx-modal-table table.bx-tab { min-width: 460px; }
+  .brinson[data-variant="studio"][data-kpilayout="hero"] .kpi.hero { padding: 16px 18px; }
+  .brinson[data-variant="studio"][data-kpilayout="hero"] .kpi.hero .kpi-v { font-size: 36px; }
+}
+
+@media (max-width: 520px) {
+  .brinson[data-variant="studio"][data-kpilayout="hero"] .bx-kpis .kpi-rest,
+  .brinson[data-variant="desk"] .bx-kpis,
+  .brinson[data-variant="studio"][data-kpilayout="grid"] .bx-kpis,
+  .brinson[data-variant="ledger"] .bx-kpis .kpi-rest { grid-template-columns: repeat(2, 1fr); }
+  .brinson[data-variant="studio"] .kpi { padding: 12px 14px; }
+  .brinson[data-variant="studio"] .kpi .kpi-v { font-size: 19px; }
+  .kpi .kpi-k { white-space: normal; }
+  .bx-select { flex: 1 1 auto; min-width: 0; }
+  .bx-ranges button { padding: 5px 8px; }
+  .bx-titles .bx-tag { display: none; }
+  .bx-perf .bx-chartwrap, .brinson[data-fit="scroll"] .bx-perf .bx-chartwrap { height: 210px; }
+}
