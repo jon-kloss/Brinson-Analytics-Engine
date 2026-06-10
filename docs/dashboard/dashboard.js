@@ -43,6 +43,11 @@ window.BrinsonDashboard = function (mount, opts) {
   var PALETTE = ["#4F6BED", "#1F97A6", "#6E62C7", "#3FA06A", "#C98A3C", "#C7586A",
     "#5B6B86", "#5FA8DE", "#9AA13E", "#A86BB6", "#46A0A0"];
 
+  // Canvas text ignores CSS media queries; bump chart fonts on phones.
+  var MOBILE = typeof matchMedia !== "undefined" && matchMedia("(max-width: 600px)").matches;
+  var TICK = MOBILE ? 11 : 9, TICK_WF = MOBILE ? 10.5 : 8.5, TICK_Y = MOBILE ? 11.5 : 9.5;
+  var TT_TITLE = MOBILE ? 12 : 10, TT_BODY = MOBILE ? 13 : 11;
+
   function shortSec(i) {
     return (D.sectorsShort && D.sectorsShort[i]) || D.sectors[i].split(" ")[0];
   }
@@ -232,8 +237,8 @@ window.BrinsonDashboard = function (mount, opts) {
     var grid = tok("--grid"), faint = tok("--faint");
     var showX = state.gridLines === "full";
     var showY = state.gridLines !== "none";
-    var x = Object.assign({ grid: { display: showX, color: grid, drawBorder: false }, ticks: { color: faint, font: { family: "IBM Plex Mono", size: 9 }, maxTicksLimit: 7, maxRotation: 0 } }, (extra && extra.x) || {});
-    var y = Object.assign({ grid: { display: showY, color: grid, drawBorder: false }, border: { display: false }, ticks: { color: faint, font: { family: "IBM Plex Mono", size: 9 } } }, (extra && extra.y) || {});
+    var x = Object.assign({ grid: { display: showX, color: grid, drawBorder: false }, ticks: { color: faint, font: { family: "IBM Plex Mono", size: TICK }, maxTicksLimit: 7, maxRotation: 0 } }, (extra && extra.x) || {});
+    var y = Object.assign({ grid: { display: showY, color: grid, drawBorder: false }, border: { display: false }, ticks: { color: faint, font: { family: "IBM Plex Mono", size: TICK } } }, (extra && extra.y) || {});
     return { x: x, y: y };
   }
 
@@ -242,8 +247,8 @@ window.BrinsonDashboard = function (mount, opts) {
     return Object.assign({
       backgroundColor: dark ? "#0a0c11" : "#161b26",
       titleColor: "#fff", bodyColor: "#e7eaf1", borderColor: "rgba(255,255,255,0.08)", borderWidth: 1,
-      padding: 9, cornerRadius: 6, titleFont: { family: "IBM Plex Mono", size: 10 },
-      bodyFont: { family: "IBM Plex Mono", size: 11 }, displayColors: false
+      padding: 9, cornerRadius: 6, titleFont: { family: "IBM Plex Mono", size: TT_TITLE },
+      bodyFont: { family: "IBM Plex Mono", size: TT_BODY }, displayColors: false
     }, extra || {});
   }
 
@@ -301,7 +306,7 @@ window.BrinsonDashboard = function (mount, opts) {
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: function (c) { return (c.raw[1] - c.raw[0]).toFixed(1) + " bps"; } } }) },
-        scales: baseScales({ x: { ticks: { maxRotation: 38, minRotation: 38, font: { family: "IBM Plex Mono", size: 8.5 } } }, y: { ticks: { callback: function (v) { return v + ""; } } } })
+        scales: baseScales({ x: { ticks: { maxRotation: 38, minRotation: 38, font: { family: "IBM Plex Mono", size: TICK_WF } } }, y: { ticks: { callback: function (v) { return v + ""; } } } })
       }
     };
   }
@@ -328,7 +333,7 @@ window.BrinsonDashboard = function (mount, opts) {
       options: {
         indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false }, tooltip: tooltipCfg({ callbacks: { label: function (c) { return (c.raw >= 0 ? "+" : "") + c.raw.toFixed(1) + " bps"; } } }) },
-        scales: baseScales({ x: { ticks: { callback: function (v) { return v; } } }, y: { ticks: { font: { family: "IBM Plex Mono", size: 9.5 } } } })
+        scales: baseScales({ x: { ticks: { callback: function (v) { return v; } } }, y: { ticks: { font: { family: "IBM Plex Mono", size: TICK_Y } } } })
       }
     };
   }
