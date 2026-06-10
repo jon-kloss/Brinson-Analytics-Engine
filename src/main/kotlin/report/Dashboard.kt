@@ -15,18 +15,22 @@ import queries.securityContributions
 /**
  * Bakes every portfolio's performance, Cariño-linked attribution, risk metrics,
  * contributors, and weekly sector weights into a self-contained static site
- * (index.html + data.json) suitable for GitHub Pages. No server: the page is
- * vanilla JS + Chart.js from a CDN reading the baked JSON.
+ * suitable for GitHub Pages: data.json (built here) plus the design assets
+ * (index.html, styles.css, dashboard.js) bundled as classpath resources.
  *
- * Date-range presets are recomputed client-side from the baked daily return
- * series using the same formulas as the engine (documented in METHODOLOGY.md);
- * attribution, contributors, and weights are full-period.
+ * Date-range presets, theme, hero KPI, and expand-to-modal interactions all run
+ * client-side in dashboard.js against the baked daily return series, using the
+ * formulas documented in METHODOLOGY.md.
  */
 fun writeDashboard(conn: Connection, outDir: Path, echo: (String) -> Unit) {
     Files.createDirectories(outDir)
     val json = buildDashboardJson(conn)
     outDir.resolve("data.json").toFile().writeText(json)
-    outDir.resolve("index.html").toFile().writeText(DASHBOARD_HTML)
+    for (asset in listOf("index.html", "styles.css", "dashboard.js")) {
+        val resource = object {}.javaClass.getResourceAsStream("/dashboard/$asset")
+            ?: error("missing bundled dashboard resource: $asset")
+        resource.use { outDir.resolve(asset).toFile().writeBytes(it.readBytes()) }
+    }
     echo("Dashboard written to $outDir (data.json: %,d bytes)".fmt(json.length))
 }
 
@@ -38,6 +42,14 @@ private fun num(x: Double): String {
     require(x.isFinite()) { "non-finite value in dashboard data: $x" }
     return "%.8f".fmt(x)
 }
+
+/** Compact sector labels for chart axes/legends, where full GICS names collide. */
+private val SECTOR_SHORT = mapOf(
+    "Information Technology" to "Info Tech",
+    "Communication Services" to "Comm. Svcs.",
+    "Consumer Discretionary" to "Cons. Disc.",
+    "Consumer Staples" to "Cons. Staples",
+)
 
 fun buildDashboardJson(conn: Connection): String {
     val (from, to) = conn.createStatement().use { st ->
@@ -71,6 +83,8 @@ fun buildDashboardJson(conn: Connection): String {
     sb.append("\"from\":${jsonString(from.toString())},\"to\":${jsonString(to.toString())},")
     sb.append("\"dates\":[").append(dates.joinToString(",") { jsonString(it.toString()) }).append("],")
     sb.append("\"sectors\":[").append(sectors.joinToString(",") { jsonString(it) }).append("],")
+    sb.append("\"sectorsShort\":[")
+        .append(sectors.joinToString(",") { jsonString(SECTOR_SHORT[it] ?: it) }).append("],")
     sb.append("\"weekIdx\":[").append(weekIdx.joinToString(",")).append("],")
     sb.append("\"rb\":[").append(rb.joinToString(",") { num(it) }).append("],")
     sb.append("\"portfolios\":[")
