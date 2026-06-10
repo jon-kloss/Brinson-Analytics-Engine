@@ -74,14 +74,15 @@ class DashboardJson(
     private val stubs: List<String>,
     /** Per-portfolio detail WITHOUT weights: {"id":..,...,"bottom":[..]} */
     val portfolioCore: Map<Int, String>,
-    /** Per-portfolio weights matrix: [[...],...] */
+    /** Per-portfolio weights piece: {"wstart":N,"weights":[[...],...]} */
     val portfolioWeights: Map<Int, String>,
 ) {
     val marketJson: String = "{" + sharedFields + "}"
     val portfoliosJson: String = "[" + stubs.joinToString(",") + "]"
 
     private fun fullPiece(pf: Int): String =
-        portfolioCore.getValue(pf).dropLast(1) + ",\"weights\":" + portfolioWeights.getValue(pf) + "}"
+        portfolioCore.getValue(pf).dropLast(1) + "," +
+            portfolioWeights.getValue(pf).removePrefix("{").removeSuffix("}") + "}"
 
     /** The complete document: identical to what the static bake ships. */
     fun fullJson(): String =
@@ -101,6 +102,16 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
     val names = conn.createStatement().use { st ->
         st.executeQuery("SELECT portfolio_id, name FROM portfolios ORDER BY 1").use { rs ->
             buildMap<Int, String> { while (rs.next()) put(rs.getInt(1), rs.getString(2)) }
+        }
+    }
+
+    // Each portfolio's true lifespan (the attribution spine fabricates wp=0 rows
+    // for every portfolio on every date, so it cannot be used for ranges).
+    val posRange = conn.createStatement().use { st ->
+        st.executeQuery("SELECT portfolio_id, min(date), max(date) FROM positions_daily GROUP BY 1").use { rs ->
+            buildMap<Int, Pair<LocalDate, LocalDate>> {
+                while (rs.next()) put(rs.getInt(1), rs.getDate(2).toLocalDate() to rs.getDate(3).toLocalDate())
+            }
         }
     }
 
@@ -131,29 +142,41 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
     val cores = LinkedHashMap<Int, String>()
     val weightPieces = LinkedHashMap<Int, String>()
     for ((pf, rows) in byPf) {
-        val byDate = rows.groupBy { it.date }.toSortedMap()
-        val rp = DoubleArray(dates.size)
-        // wp per sector per date, for the weekly weight chart.
-        val wp = Array(sectors.size) { DoubleArray(dates.size) }
+        // Attribution starts the day after the first position snapshot (the lag
+        // needs a prior close) and ends at the last one; spine rows outside that
+        // window are fabricated wp=0 days and must not enter linking or risk.
+        val (minPos, maxPos) = posRange.getValue(pf)
+        val first = dates.indexOfFirst { it > minPos }.coerceAtLeast(0)
+        val last = dateIndex.getValue(maxPos)
+        val byDate = rows.asSequence()
+            .filter { it.date > minPos && it.date <= maxPos }
+            .groupBy { it.date }.toSortedMap()
+        val n = last - first + 1
+        val rp = DoubleArray(n)
+        // wp per sector per in-window date, for the weekly weight chart.
+        val wp = Array(sectors.size) { DoubleArray(n) }
         val sectorIdx = sectors.withIndex().associate { (i, s) -> s to i }
         for ((date, dayRows) in byDate) {
-            val t = dateIndex.getValue(date)
+            val t = dateIndex.getValue(date) - first
             rp[t] = dayRows.sumOf { it.wp * it.rp }
             for (r in dayRows) wp[sectorIdx.getValue(r.sector)][t] = r.wp
         }
         val linked = linkDailyRows(byDate.values, pf).associateBy { it.sector }
-        val active = rp.zip(rb.asList()) { p, b -> p - b }
+        val rpW = rp
+        val rbW = rb.copyOfRange(first, last + 1)
+        val active = rpW.zip(rbW.asList()) { p, b -> p - b }
         val contribs = securityContributions(conn, pf, from, to)
 
         val pb = StringBuilder()
         pb.append("{\"id\":$pf,\"name\":${jsonString(names[pf] ?: "Portfolio $pf")},")
-        pb.append("\"rp\":[").append(rp.joinToString(",") { num(it) }).append("],")
+        pb.append("\"start\":$first,")
+        pb.append("\"rp\":[").append(rpW.joinToString(",") { num(it) }).append("],")
         pb.append("\"risk\":{")
-        pb.append("\"twr\":${num(linkGeometrically(rp.asList()))},")
-        pb.append("\"benchTwr\":${num(linkGeometrically(rb.asList()))},")
+        pb.append("\"twr\":${num(linkGeometrically(rpW.asList()))},")
+        pb.append("\"benchTwr\":${num(linkGeometrically(rbW.asList()))},")
         pb.append("\"te\":${num(annualizedTrackingError(active))},")
         pb.append("\"ir\":${informationRatio(active)?.let { num(it) } ?: "null"},")
-        pb.append("\"maxDd\":${num(maxDrawdown(rp.asList()))}},")
+        pb.append("\"maxDd\":${num(maxDrawdown(rpW.asList()))}},")
         pb.append("\"attribution\":[")
         pb.append(
             sectors.joinToString(",") { s ->
@@ -170,9 +193,13 @@ fun buildDashboardParts(conn: Connection): DashboardJson {
         pb.append("\"top\":[").append(contribJson(contribs.take(8))).append("],")
         pb.append("\"bottom\":[").append(contribJson(contribs.takeLast(5).reversed())).append("]}")
         cores[pf] = pb.toString()
-        weightPieces[pf] = "[" + sectors.indices.joinToString(",") { si ->
-            "[" + weekIdx.joinToString(",") { numW(wp[si][it]) } + "]"
-        } + "]"
+        // Weekly samples restricted to the portfolio's window; wstart anchors them.
+        val weeks = weekIdx.withIndex().filter { (_, idx) -> idx in first..last }
+        val wstart = weeks.firstOrNull()?.index ?: 0
+        weightPieces[pf] = "{\"wstart\":$wstart,\"weights\":[" +
+            sectors.indices.joinToString(",") { si ->
+                "[" + weeks.joinToString(",") { (_, idx) -> numW(wp[si][idx - first]) } + "]"
+            } + "]}"
     }
 
     val stubs = byPf.keys.map { pf ->

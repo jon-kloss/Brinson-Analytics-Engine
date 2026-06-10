@@ -152,6 +152,9 @@ window.BrinsonDashboard = function (mount, opts) {
           '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="2.5" y1="5.5" x2="13.5" y2="5.5"/><line x1="2.5" y1="10.5" x2="13.5" y2="10.5"/><circle cx="6" cy="5.5" r="1.9" fill="var(--surface)"/><circle cx="10" cy="10.5" r="1.9" fill="var(--surface)"/></svg>' +
         '</button>' +
         '<button class="bx-theme" data-theme-toggle title="Toggle theme"></button>' +
+        '<button class="bx-theme" data-upload title="Upload portfolio CSV" style="display:none">' +
+          '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10V2M3.5 5.5L7 2l3.5 3.5M2 12h10"/></svg></button>' +
+        '<input type="file" accept=".csv,text/csv" data-uploadinput style="display:none">' +
         '<a class="bx-theme" href="guide.html" title="How this dashboard works" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">?</a>' +
       '</div>' +
     '</header>' +
@@ -212,7 +215,10 @@ window.BrinsonDashboard = function (mount, opts) {
   // ── KPI model ─────────────────────────────────────────────────────────
   function computeKpis() {
     var p = D.portfolios[state.pf];
-    var rp = slice(p.rp), rb = slice(D.rb), dates = slice(D.dates);
+    var st = p.start || 0, n = p.rp.length;
+    // Period chips anchor to the global calendar; clamp into this portfolio's window.
+    var s = Math.max(0, Math.min(periodStartIdx() - st, Math.max(0, n - 2)));
+    var rp = p.rp.slice(s), rb = D.rb.slice(st + s, st + n), dates = D.dates.slice(st + s, st + n);
     var act = rp.map(function (x, i) { return x - rb[i]; });
     var cp = cum(rp), cb = cum(rb);
     var twr = cp[cp.length - 1], btwr = cb[cb.length - 1];
@@ -476,7 +482,8 @@ window.BrinsonDashboard = function (mount, opts) {
     return {
       type: "line",
       data: {
-        labels: D.weekIdx.map(function (i) { return D.dates[i]; }),
+        labels: D.weekIdx.slice(p.wstart || 0, (p.wstart || 0) + p.weights[0].length)
+          .map(function (i) { return D.dates[i]; }),
         datasets: D.sectors.map(function (s, si) {
           var c = PALETTE[si % PALETTE.length];
           return { label: s, data: p.weights[si].map(function (w) { return 100 * w; }), borderColor: hexA(c, 0.9), backgroundColor: hexA(c, 0.55), fill: true, pointRadius: 0, borderWidth: 0.6, tension: 0.2 };
@@ -590,6 +597,16 @@ window.BrinsonDashboard = function (mount, opts) {
       else window.postMessage({ type: "__activate_edit_mode" }, "*");
     });
   }
+  var upBtn = root.querySelector("[data-upload]");
+  var upInput = root.querySelector("[data-uploadinput]");
+  if (opts.onUpload) {
+    upBtn.style.display = "";
+    upBtn.addEventListener("click", function () { upInput.click(); });
+    upInput.addEventListener("change", function () {
+      if (upInput.files && upInput.files[0]) opts.onUpload(upInput.files[0]);
+      upInput.value = "";
+    });
+  }
   root.addEventListener("click", function (e) {
     var ex = e.target.closest("[data-expand]");
     if (ex) { openPanel(ex.getAttribute("data-expand")); }
@@ -611,6 +628,14 @@ window.BrinsonDashboard = function (mount, opts) {
       mount.removeChild(root);
     },
     update: function (p) { Object.assign(state, p); render(); },
+    setPortfolios: function (selectIdx) {
+      sel.innerHTML = "";
+      D.portfolios.forEach(function (p, i) {
+        var o = document.createElement("option"); o.value = i; o.textContent = p.name; sel.appendChild(o);
+      });
+      if (selectIdx != null) { sel.value = selectIdx; state.pf = selectIdx; }
+      render();
+    },
     getState: function () { return state; },
     root: root
   };

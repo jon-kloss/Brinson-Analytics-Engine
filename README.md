@@ -188,6 +188,14 @@ pre-compressed at boot. Against a live backend the first paint costs **~6.5 KB o
 source in order: `?api=<backend base url>` override → same-origin live API → static
 `data.json` (GitHub Pages). One bundle, three deployment modes.
 
+**Importing your own portfolio:** `brinson import --csv holdings.csv --name "My Account"`
+(or upload from the dashboard's ↑ button against a live backend / `POST /api/import?name=...`).
+The CSV is one row per ticker per trading day — `date,ticker,sector,quantity,price,dividend` —
+validated transactionally (GICS sectors, gapless calendar, complete matrix, positive prices).
+Returns are derived from the prices; external cash flows are estimated from share changes
+valued at the prior close. Each portfolio is reported over its own lifespan. On Railway the
+DB lives in the image, so imports persist until the next deploy.
+
 **Deploying (e.g. Railway):** the repo's `Dockerfile` builds the app and **bakes the seeded
 dataset into the image at build time** — deterministic generation means the deployed data
 is bit-for-bit the data behind the benchmark numbers, and containers cold-start instantly.
