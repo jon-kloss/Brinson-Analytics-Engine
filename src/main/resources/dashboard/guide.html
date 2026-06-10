@@ -336,6 +336,12 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
       to average active weights (wp − wb) per sector: the exposures-vs-benchmark view.</td></tr>
     <tr><td><b>Expand icons / theme</b></td><td>Any chart opens in a focused modal (Esc closes);
       the moon/sun toggles dark mode.</td></tr>
+    <tr><td><b>Upload (↑)</b></td><td>Live-backend only: upload a daily-holdings CSV
+      (<span class="m">date,ticker,sector,quantity,price,dividend</span> — one row per ticker per
+      trading day) and your portfolio joins the picker, reported over its own date range. Flows
+      are estimated from share changes at the prior close; the import is validated and
+      transactional, and rejected files leave everything untouched. On the hosted demo,
+      uploads persist until the next deploy.</td></tr>
   </table>
   <div class="callout"><b>How to read a waterfall bar:</b> “Real Estate +467.9” means: of the
   portfolio's total active return, 467.9 basis points (4.679 percentage points) are attributable

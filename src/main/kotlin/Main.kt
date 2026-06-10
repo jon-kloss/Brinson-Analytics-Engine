@@ -4,12 +4,14 @@ import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.double
 import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.long
 import datagen.DataGenerator
 import datagen.GenParams
 import etl.TABLES
+import etl.importPortfolio
 import etl.loadFromParquet
 import etl.openDatabase
 import etl.openInMemory
@@ -131,6 +133,24 @@ class Dashboard : CliktCommand(name = "dashboard") {
     }
 }
 
+class Import : CliktCommand(name = "import") {
+    private val csv by option(help = "Daily-holdings CSV: date,ticker,sector,quantity,price,dividend").required()
+    private val name by option(help = "Portfolio display name").required()
+    private val db by option().default("data/brinson.duckdb")
+
+    override fun run() {
+        openDatabase(Path.of(db)).use { conn ->
+            val r = importPortfolio(conn, Path.of(csv), name)
+            echo("Imported '${r.name}' as portfolio ${r.portfolioId}:")
+            echo("  %,d position rows | %d tickers (%d new securities) | %s .. %s | %d estimated flow days"
+                .format(r.positionRows, r.tickers, r.newSecurities, r.from, r.to, r.flowDays))
+            echo("Note: flows are estimated from share changes at the prior close; real flows are")
+            echo("rarely pro-rata, so attribution vs TWR may differ slightly on flow days (METHODOLOGY.md).")
+            echo("Re-run 'brinson dashboard' (or restart 'serve') to surface it.")
+        }
+    }
+}
+
 class Serve : CliktCommand(name = "serve") {
     private val db by option().default("data/brinson.duckdb")
     private val port by option(help = "Listen port (default: \$PORT or 8080)").int()
@@ -144,4 +164,4 @@ class Serve : CliktCommand(name = "serve") {
 }
 
 fun main(args: Array<String>) =
-    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard(), Serve()).main(args)
+    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard(), Serve(), Import()).main(args)

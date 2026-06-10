@@ -37,6 +37,7 @@ directory) — browsers block <code>fetch</code> from <code>file://</code>.</div
 //   3. data.json                 baked static file (GitHub Pages) — everything at once
 var INITIAL_PF = 6; // Portfolio 007, the README's example
 var dash = null;
+var liveBase = null; // non-null when a live backend answered: enables uploads
 var override = (new URLSearchParams(location.search).get("api") || "").replace(/\/+$/, "");
 
 function getJson(u) {
@@ -47,6 +48,7 @@ function splitMode(base) {
   var pre = base ? base + "/" : "";
   return Promise.all([getJson(pre + "api/market"), getJson(pre + "api/portfolios")])
     .then(function (r) {
+      liveBase = pre;
       var D = r[0];
       D.portfolios = r[1];
       D.__loadPf = function (i) {
@@ -58,6 +60,7 @@ function splitMode(base) {
           // fetch after the portfolio renders, then refresh in place.
           getJson(pre + "api/portfolio/" + core.id + "/weights").then(function (w) {
             D.portfolios[i].weights = w.weights;
+            D.portfolios[i].wstart = w.wstart;
             if (dash) dash.update({});
           });
         });
@@ -91,7 +94,26 @@ attempt
       lineWeight: 3,
       areaFill: true,
       gridLines: "full",
-      ensurePortfolio: d.__loadPf || null
+      ensurePortfolio: d.__loadPf || null,
+      // Upload is a live-backend capability: POST the CSV, refetch the picker,
+      // and jump to the newly imported portfolio.
+      onUpload: liveBase === null ? null : function (file) {
+        file.text().then(function (csv) {
+          var name = encodeURIComponent(file.name.replace(/\.csv$/i, ""));
+          return fetch(liveBase + "api/import?name=" + name,
+            { method: "POST", headers: { "Content-Type": "text/csv" }, body: csv });
+        }).then(function (r) {
+          return r.text().then(function (t) { if (!r.ok) throw new Error(t); return JSON.parse(t); });
+        }).then(function (res) {
+          return getJson(liveBase + "api/portfolios").then(function (list) {
+            var loaded = {};
+            d.portfolios.forEach(function (p) { if (p.rp) loaded[p.id] = p; });
+            d.portfolios = list.map(function (s) { return loaded[s.id] || s; });
+            var idx = d.portfolios.map(function (p) { return p.id; }).indexOf(res.id);
+            return d.__loadPf(idx).then(function () { dash.setPortfolios(idx); });
+          });
+        }).catch(function (e) { alert("Upload failed:\n" + e.message); });
+      }
     });
   })
   .catch(function () { document.getElementById("err").style.display = "block"; });
