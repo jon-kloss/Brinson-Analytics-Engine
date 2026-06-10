@@ -45,7 +45,7 @@ class DashboardTest {
         } finally {
             Locale.setDefault(saved)
         }
-        for (key in listOf("\"dates\"", "\"sectors\"", "\"rb\"", "\"portfolios\"", "\"risk\"", "\"attribution\"", "\"weights\"")) {
+        for (key in listOf("\"dates\"", "\"sectors\"", "\"sectorsShort\"", "\"rb\"", "\"portfolios\"", "\"risk\"", "\"attribution\"", "\"weights\"")) {
             assertContains(json, key)
         }
         assertFalse(json.contains("NaN") || json.contains("Infinity"), "non-finite values leaked into JSON")
@@ -70,9 +70,12 @@ class DashboardTest {
                 loadFromParquet(conn, tmp.resolve("pq"))
                 writeDashboard(conn, tmp.resolve("site")) {}
             }
-            assertTrue(tmp.resolve("site/index.html").toFile().length() > 1000)
+            assertTrue(tmp.resolve("site/index.html").toFile().length() > 500)
+            assertTrue(tmp.resolve("site/styles.css").toFile().length() > 1000)
+            assertTrue(tmp.resolve("site/dashboard.js").toFile().length() > 1000)
             assertTrue(tmp.resolve("site/data.json").toFile().length() > 1000)
             assertContains(tmp.resolve("site/index.html").toFile().readText(), "data.json")
+            assertContains(tmp.resolve("site/dashboard.js").toFile().readText(), "sectorsShort")
         } finally {
             @OptIn(ExperimentalPathApi::class)
             tmp.deleteRecursively()
