@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brinson — How this dashboard works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#e9ecf1; --surface:#fff; --surface-2:#f5f7fa; --ink:#161b26; --ink-soft:#36404f;
+    --muted:#5d6779; --faint:#98a1b1; --line:#e4e8ee; --accent:#3fa06a; --accent-deep:#2c7a4e;
+    --up:#168a5b; --down:#c6483f;
+    --sans:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+    --serif:"IBM Plex Serif",Georgia,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.65; }
+  .wrap { max-width:880px; margin:0 auto; padding:28px 24px 80px; }
+  header.hero { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:30px 34px; margin-bottom:22px; box-shadow:0 1px 3px rgba(22,27,38,.06); }
+  h1 { font-family:var(--serif); font-weight:600; font-size:1.9rem; margin:0 0 8px; letter-spacing:-.01em; }
+  h1 .acc { color:var(--accent-deep); }
+  .lede { color:var(--muted); font-size:1.02rem; max-width:62ch; margin:0; }
+  nav.toc { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 22px; margin-bottom:22px; }
+  nav.toc b { font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; color:var(--faint); }
+  nav.toc a { color:var(--accent-deep); text-decoration:none; margin-right:14px; font-size:.9rem; }
+  nav.toc a:hover { text-decoration:underline; }
+  section { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:26px 34px; margin-bottom:22px; box-shadow:0 1px 3px rgba(22,27,38,.06); }
+  h2 { font-family:var(--serif); font-weight:600; font-size:1.35rem; margin:0 0 4px; }
+  h2 + .sub { color:var(--faint); font-size:.85rem; margin:0 0 16px; }
+  h3 { font-size:1rem; font-weight:600; margin:22px 0 6px; color:var(--ink-soft); }
+  p { margin:10px 0; }
+  code, .m { font-family:var(--mono); font-size:.86em; background:var(--surface-2); border:1px solid var(--line);
+    border-radius:4px; padding:1px 5px; }
+  pre { font-family:var(--mono); font-size:.82rem; line-height:1.6; background:var(--surface-2);
+    border:1px solid var(--line); border-radius:10px; padding:14px 18px; overflow-x:auto; }
+  pre b { color:var(--accent-deep); }
+  table { border-collapse:collapse; width:100%; font-size:.88rem; margin:12px 0; }
+  th { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--faint); font-weight:600; }
+  th, td { padding:7px 10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.num, th.num { text-align:right; font-family:var(--mono); font-size:.82rem; }
+  .pos { color:var(--up); } .neg { color:var(--down); }
+  .callout { border-left:3px solid var(--accent); background:var(--surface-2); border-radius:0 10px 10px 0;
+    padding:12px 18px; margin:14px 0; font-size:.93rem; }
+  .callout b:first-child { color:var(--accent-deep); }
+  .qa dt { font-weight:600; margin-top:18px; color:var(--ink-soft); }
+  .qa dt::before { content:"Q  "; color:var(--accent-deep); font-family:var(--mono); font-weight:600; }
+  .qa dd { margin:6px 0 0 0; padding-left:26px; }
+  .pipeline { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.82rem; margin:14px 0; }
+  .pipeline span.node { background:var(--surface-2); border:1px solid var(--line); border-radius:8px;
+    padding:7px 12px; font-family:var(--mono); }
+  .pipeline span.arr { color:var(--faint); }
+  .small { font-size:.83rem; color:var(--muted); }
+  a { color:var(--accent-deep); }
+  .back { position:fixed; top:16px; right:16px; background:var(--surface); border:1px solid var(--line);
+    border-radius:999px; padding:7px 14px; font-size:.82rem; text-decoration:none; box-shadow:0 1px 3px rgba(22,27,38,.08); }
+  @media (max-width:700px){ section,header.hero{padding:20px;} .back{display:none;} }
+</style>
+</head>
+<body>
+<a class="back" href="index.html">← Dashboard</a>
+<div class="wrap">
+
+<header class="hero">
+  <h1><span class="acc">Brinson</span> — how this dashboard works</h1>
+  <p class="lede">The data, the terms, the math, and how to read every panel — everything needed
+  to explain this system end-to-end, from a 10-million-row fact table to a single basis point
+  on the attribution waterfall.</p>
+</header>
+
+<nav class="toc">
+  <b>Contents</b><br>
+  <a href="#system">1 · The system</a>
+  <a href="#data">2 · The data</a>
+  <a href="#twr">3 · TWR</a>
+  <a href="#brinson">4 · Brinson-Fachler</a>
+  <a href="#carino">5 · Cariño linking</a>
+  <a href="#risk">6 · Risk metrics</a>
+  <a href="#panels">7 · Reading the panels</a>
+  <a href="#walkthrough">8 · Portfolio 007 walkthrough</a>
+  <a href="#qa">9 · Interview Q&amp;A</a>
+  <a href="#glossary">10 · Glossary</a>
+</nav>
+
+<section id="system">
+  <h2>1 · The system in one view</h2>
+  <p class="sub">what computes what, and where</p>
+  <div class="pipeline">
+    <span class="node">datagen<br><span class="small">seeded market sim</span></span><span class="arr">→</span>
+    <span class="node">Parquet<br><span class="small">columnar files</span></span><span class="arr">→</span>
+    <span class="node">DuckDB<br><span class="small">star schema, 10.4M rows</span></span><span class="arr">→</span>
+    <span class="node">engine<br><span class="small">Kotlin: TWR · Brinson · Cariño · risk</span></span><span class="arr">→</span>
+    <span class="node">data.json<br><span class="small">baked per portfolio</span></span><span class="arr">→</span>
+    <span class="node">dashboard<br><span class="small">static page, no server</span></span>
+  </div>
+  <p>A Kotlin pipeline generates a synthetic two-year equity market, lands it in
+  <b>DuckDB</b> (an embedded columnar OLAP database) as a star schema with a
+  <b>10,377,750-row</b> daily positions fact table, computes performance analytics with a tested
+  engine, and bakes the results into a 1&nbsp;MB <code>data.json</code>. The dashboard is a
+  <b>static page</b>: no backend, no live queries — GitHub Pages serves three files and the
+  browser renders them with Chart.js.</p>
+  <div class="callout"><b>The headline:</b> the core attribution query aggregates the 10.4M-row
+  fact table in <b>1.31&nbsp;s</b> inside DuckDB — <b>6.7× faster</b> than pulling the rows into
+  the JVM and aggregating there, with both implementations agreeing to within 5.2×10<sup>−17</sup>.
+  The entire speedup is <i>where</i> the math runs: the optimized path moves 550 result rows
+  across the JDBC boundary instead of 10.4 million input rows.</div>
+  <p class="small">Everything here is reproducible: a fixed random seed (42), golden tests pinning
+  hand-worked numbers to 1e-12, and invariant tests enforcing the accounting identities to 1e-10.</p>
+</section>
+
+<section id="data">
+  <h2>2 · The data</h2>
+  <p class="sub">synthetic, but built to behave like the real thing</p>
+  <table>
+    <tr><th>Table</th><th>Contents</th><th class="num">Rows</th></tr>
+    <tr><td><code>securities</code></td><td>500 equities across the 11 GICS sectors</td><td class="num">500</td></tr>
+    <tr><td><code>portfolios</code></td><td>50 portfolios, USD, common inception</td><td class="num">50</td></tr>
+    <tr><td><code>positions_daily</code></td><td><b>the fact table</b>: per day × portfolio × holding — quantity, price, market value</td><td class="num">10,377,750</td></tr>
+    <tr><td><code>transactions</code></td><td>BUY / SELL / DIVIDEND / CASHFLOW with a signed cash-impact convention</td><td class="num">~111k</td></tr>
+    <tr><td><code>benchmark_weights</code></td><td>a buy-and-hold index over the full universe, daily weights</td><td class="num">252,000</td></tr>
+    <tr><td><code>benchmark_returns</code></td><td>each security's daily <i>total</i> return (price + dividend)</td><td class="num">252,000</td></tr>
+  </table>
+  <h3>How the market is simulated</h3>
+  <p>Prices follow <b>geometric Brownian motion</b> with three shock layers — a market-wide shock,
+  a sector shock (so sectors move together, which is what makes sector attribution meaningful),
+  and an idiosyncratic shock per stock. About 60% of securities pay quarterly <b>dividends</b>,
+  modeled as immediately reinvested at the close. Portfolios receive periodic external
+  <b>cash flows</b> (invested pro-rata at the prior close) and make occasional value-neutral
+  rebalance trades. Each portfolio persistently overweights three “favorite” sectors — that tilt
+  is what produces nonzero allocation effects.</p>
+  <h3>What's baked into the dashboard</h3>
+  <p><code>data.json</code> carries, per portfolio: the <b>daily return series</b> (and one shared
+  benchmark series), the <b>full-period Cariño-linked attribution</b> by sector, top/bottom
+  <b>contributors</b>, and <b>weekly sector weights</b>. Daily series are what let the range
+  buttons recompute returns and risk client-side; attribution stays full-period because
+  recomputing it for arbitrary ranges would need the per-day×sector effect matrix (~30&nbsp;MB).</p>
+</section>
+
+<section id="twr">
+  <h2>3 · Time-Weighted Return (TWR)</h2>
+  <p class="sub">the return of the <i>strategy</i>, not the client's deposit timing</p>
+  <p>A portfolio that receives a big deposit right before a bad week looks terrible on a naive
+  start/end calculation — even if every investment decision was sound. TWR removes that
+  distortion: cut time into sub-periods at each external cash flow, compute each sub-period's
+  return in isolation, and compound them. Cash flows are assumed to arrive at the
+  <b>beginning of the day</b> (the <span class="m">w&nbsp;=&nbsp;1</span> convention), so the
+  flow is in the denominator — it had the whole day to earn:</p>
+  <pre>r_t = (MV_end − MV_begin − CF) / (MV_begin + CF)        <b>daily sub-period return</b>
+TWR = ∏(1 + r_t) − 1                                     <b>geometric linking</b>
+annualized = (1 + TWR)^(365.25 / calendar days) − 1      <b>only for periods ≥ 1 year</b></pre>
+  <h3>Worked example (the repo's golden test)</h3>
+  <p>Four securities, three days, one +1,020 cash flow at the start of day 2:</p>
+  <pre>day 1:  (4,040 − 4,000 − 0)     / 4,000           = <b>+1.0000%</b>
+day 2:  (5,150 − 4,040 − 1,020) / (4,040 + 1,020) = 90/5,060 = <b>+1.7787%</b>
+day 3:  (5,185 − 5,150)         / 5,150           = <b>+0.6796%</b>
+TWR  =  1.01 × 1.017787 × 1.006796 − 1 = 3537/101200 = <b>+3.4951%</b></pre>
+  <p class="small">Note day 2: the naive calc (5,150/4,040 − 1 = +27%) would credit the deposit
+  as “return.” TWR strips it out. Dividends are <i>not</i> external flows — they're income the
+  portfolio earned, so they stay in the numerator (each security's daily return is a total
+  return, <span class="m">(p_t + dividend)/p_(t−1) − 1</span>).</p>
+</section>
+
+<section id="brinson">
+  <h2>4 · Brinson-Fachler attribution</h2>
+  <p class="sub">decomposing <i>where</i> active return came from</p>
+  <p><b>Active return</b> = portfolio return − benchmark return. Attribution splits it by sector
+  into three effects, using four inputs per sector <i>i</i>: portfolio weight
+  <span class="m">wp</span>, benchmark weight <span class="m">wb</span>, portfolio sector return
+  <span class="m">rp</span>, benchmark sector return <span class="m">rb_i</span>
+  (and the total benchmark return <span class="m">rb</span>):</p>
+  <pre><b>Allocation</b>   A = (wp − wb) × (rb_i − rb)   did over/under-weighting the sector help?
+<b>Selection</b>    S = wb × (rp − rb_i)          within the sector, did you pick better stocks?
+<b>Interaction</b>  I = (wp − wb) × (rp − rb_i)   the cross-term: extra weight × extra skill</pre>
+  <p>Intuition: <b>allocation</b> rewards overweighting sectors that beat the overall benchmark
+  (note the Brinson-<i>Fachler</i> refinement — it compares the sector to <span class="m">rb</span>,
+  so overweighting a positive-but-below-average sector correctly scores negative).
+  <b>Selection</b> rewards beating the sector's own benchmark return with your picks, sized by the
+  benchmark weight. <b>Interaction</b> is what's left so the identity closes:</p>
+  <pre><b>Σ (A + S + I) = active return        exactly — enforced in tests to 1e-10</b></pre>
+  <h3>Worked example (golden test, day 1)</h3>
+  <p>Two sectors. Portfolio holds 50/50; benchmark holds Tech 60 / Energy 40.
+  Tech returns 0% in the portfolio but +2.5% in the benchmark; Energy +2% in both.
+  Benchmark total <span class="m">rb = 0.6×2.5% + 0.4×2% = 2.3%</span>; portfolio = 1.0%;
+  active = <b>−1.3%</b>.</p>
+  <table>
+    <tr><th>Sector</th><th class="num">A</th><th class="num">S</th><th class="num">I</th></tr>
+    <tr><td>Tech &nbsp;<span class="small">(underweight a strong sector, bad picks)</span></td>
+      <td class="num neg">−0.0002</td><td class="num neg">−0.0150</td><td class="num pos">+0.0025</td></tr>
+    <tr><td>Energy <span class="small">(overweight a below-average sector)</span></td>
+      <td class="num neg">−0.0003</td><td class="num">0</td><td class="num">0</td></tr>
+    <tr><td><b>Sum</b></td><td class="num" colspan="3"><b>−0.0130 = active ✓</b></td></tr>
+  </table>
+  <p class="small">Weights are <b>prior-close market-value weights</b>; the engine defines an
+  unheld sector's <span class="m">rp := rb_i</span> so it shows pure allocation and no fictitious
+  selection. Per-security <b>contribution</b> is the simpler cousin:
+  <span class="m">c = w × r</span>, summing exactly to the portfolio return — that's the
+  Contributors panel.</p>
+</section>
+
+<section id="carino">
+  <h2>5 · Cariño linking</h2>
+  <p class="sub">why daily effects can't just be added — and the fix</p>
+  <p>The Brinson identity holds <i>per day</i>. But returns compound geometrically while effects
+  add arithmetically, so summed daily effects drift away from the multi-period active return
+  (in this data, by ~180&nbsp;bps over two years). <b>Cariño log-linking</b> rescales each day's
+  effects so they reconcile exactly:</p>
+  <pre>k(a,b) = (ln(1+a) − ln(1+b)) / (a − b)         limit 1/(1+a) as b → a
+k_t = k(rp_t, rb_t)      per-day        k = k(R_p, R_b)      full-period
+scaled effect = effect × <b>k_t / k</b>
+⇒  Σ_t Σ_i scaled effects = <b>R_p − R_b</b>        the geometric active return, exactly</pre>
+  <h3>Worked example</h3>
+  <pre>periods: (rp, rb) = (10%, 5%), then (−2%, +1%)     R_p = 7.80%, R_b = 6.05%
+k₁ = 0.930400312698     k₂ = 1.005101272356     k = 0.935255855097
+factor₁ = 0.994808327183  → scaled active +4.9740%
+factor₂ = 1.074680545305  → scaled active −3.2240%
+                                     sum = <b>+1.7500% = R_p − R_b ✓</b></pre>
+  <div class="callout"><b>Interview nuance:</b> the identity constrains only the <i>sum</i>.
+  Cariño, Menchero, and GRAP distribute the reconciliation differently — per-sector linked
+  numbers are convention-dependent even though every method hits the same total. This engine
+  implements Cariño and says so in its methodology.</div>
+</section>
+
+<section id="risk">
+  <h2>6 · Risk metrics</h2>
+  <p class="sub">the KPI cards' other half</p>
+  <pre><b>Tracking error</b>  TE = stdev(daily active returns) × √252      annualized; "how far do I stray?"
+<b>Info ratio</b>      IR = mean(daily active) × 252 / TE           active return per unit of risk taken
+<b>Max drawdown</b>    worst peak-to-trough fall of the compounded portfolio path</pre>
+  <p>Rules of thumb: TE of 2–6% is a typical active equity mandate; IR above ~0.5 is good and
+  above 1.0 is excellent over meaningful horizons. Max drawdown answers the client's most
+  visceral question — “how much could I have been down?” IR on short ranges (the 3M button)
+  is statistically noisy; treat it as indicative, not significant.</p>
+</section>
+
+<section id="panels">
+  <h2>7 · Reading the dashboard, panel by panel</h2>
+  <p class="sub">and which numbers move when you click things</p>
+  <table>
+    <tr><th>Control / panel</th><th>What it does</th></tr>
+    <tr><td><b>Portfolio picker</b></td><td>Switches all panels to that portfolio's baked data.</td></tr>
+    <tr><td><b>All / 1Y / 6M / 3M</b></td><td>Re-slices the daily return series and <b>recomputes the KPI
+      cards and performance chart in the browser</b> using the formulas above. Attribution,
+      contributors, and weights stay <b>full-period</b> (labeled as such).</td></tr>
+    <tr><td><b>KPI cards</b></td><td>The six headline numbers. <b>Click any card to pin it as the hero.</b>
+      Green/red coloring follows sign.</td></tr>
+    <tr><td><b>Cumulative return</b></td><td>Compounded growth of portfolio (accent) vs benchmark (muted).
+      The vertical gap at the right edge is the geometric active return.</td></tr>
+    <tr><td><b>Attribution waterfall</b></td><td>Sectors sorted by total effect; each bar <i>starts where the
+      previous ended</i>, stepping cumulatively to the final “Active” bar. Bar height = that sector's
+      Cariño-linked A+S+I in bps. The table beneath splits each sector into the three effects.</td></tr>
+    <tr><td><b>Contributors</b></td><td>Top and bottom securities by full-period contribution
+      (Σ daily w×r), in bps of portfolio return.</td></tr>
+    <tr><td><b>Sector weights</b></td><td>Weekly portfolio weights stacked to 100% — drift comes from
+      relative performance and the simulated rebalance trades.</td></tr>
+    <tr><td><b>Expand icons / theme</b></td><td>Any chart opens in a focused modal (Esc closes);
+      the moon/sun toggles dark mode.</td></tr>
+  </table>
+  <div class="callout"><b>How to read a waterfall bar:</b> “Real Estate +467.9” means: of the
+  portfolio's total active return, 467.9 basis points (4.679 percentage points) are attributable
+  to decisions in Real Estate — split across how much was held (allocation), what was picked
+  (selection), and their interaction.</div>
+</section>
+
+<section id="walkthrough">
+  <h2>8 · Walkthrough: Portfolio 007, full period</h2>
+  <p class="sub">the narrative an interviewer should hear</p>
+  <p>“Over 504 trading days the portfolio returned <b>+33.18%</b> against the benchmark's
+  <b>+25.51%</b> — <b>+7.67%</b> active. It earned that with a tracking error of just
+  <b>2.49%</b>, so the information ratio is <b>1.19</b>: strong risk-adjusted active management,
+  not a lucky concentrated bet. The worst peak-to-trough fall was <b>−16.97%</b>.”</p>
+  <p>“Where did the 767 basis points come from? The waterfall says <b>Real Estate</b> dominates:
+  <b>+467.9&nbsp;bps</b>, almost all selection (+212.5) and interaction (+273.5) — the portfolio
+  tripled the benchmark's weight (15.2% vs 6.5%) <i>and</i> picked the right names, so the
+  cross-term is large and positive. <b>Energy</b> added <b>+266.6&nbsp;bps</b> the opposite way:
+  mostly allocation (+213.1) from holding half the benchmark's weight (5.2% vs 10.5%) in a sector
+  that lagged. The big detractor is <b>Consumer Staples</b>, <b>−204.7&nbsp;bps</b>, driven by
+  selection (−188.5) — right-ish weight, wrong stocks.”</p>
+  <p>“The sector totals are Cariño-linked, so they sum to <b>+767.2&nbsp;bps — exactly</b> the
+  geometric active return on the cards. That reconciliation is enforced by tests, not
+  approximate.”</p>
+  <p class="small">Practice this paragraph until it's fluid — it demonstrates, in one breath,
+  that you understand performance, risk, attribution, and the linking subtlety.</p>
+</section>
+
+<section id="qa">
+  <h2>9 · Interview Q&amp;A</h2>
+  <p class="sub">the questions to expect, with honest answers</p>
+  <dl class="qa">
+    <dt>Why TWR rather than a simple or money-weighted return?</dt>
+    <dd>Simple start/end return is distorted by external cash flows the manager doesn't control.
+    TWR isolates strategy skill by compounding flow-free sub-periods. Money-weighted return (IRR)
+    answers the complementary question — the <i>client's</i> experience including their timing —
+    and is on the roadmap; the two diverge exactly when large flows precede strong moves.</dd>
+    <dt>Why beginning-of-day flows (w=1)? What about Modified Dietz?</dt>
+    <dd>A convention had to be picked and enforced; w=1 says the flow was invested all day,
+    which matches the generator's mechanics (flows buy at the prior close). Modified Dietz
+    (w=0.5) approximates mid-period flows when timestamps are unknown. The convention is
+    documented, golden-tested, and isolated in one function — swapping it is a one-line change.</dd>
+    <dt>Why report interaction separately? Many shops fold it into selection.</dt>
+    <dd>Transparency first: folding hides that the cross-term can dominate (see Real Estate,
+    where interaction exceeds selection). Two-effect reporting is a presentation choice on top
+    of the same math, and trivially derivable from this output.</dd>
+    <dt>Why do attribution totals match the active return exactly?</dt>
+    <dd>Per day it's an algebraic identity of Brinson-Fachler. Across days it's Cariño
+    log-linking — without it, summed daily effects drift from the geometric active return.
+    Both are enforced as test invariants (1e-10), not eyeballed.</dd>
+    <dt>Where does the 6.7× query speedup come from?</dt>
+    <dd>Not from better math — both paths compute identical numbers (verified to ~1e-17). The
+    naive path serializes 10.4M rows across JDBC and aggregates row-at-a-time on the JVM heap;
+    the optimized path runs one set-based SQL statement — a window-function <code>lag</code> for
+    prior-close weights, hash joins, group-bys — inside DuckDB's vectorized columnar engine and
+    returns 550 rows. Move results, not rows. The annotated EXPLAIN ANALYZE is in the repo.</dd>
+    <dt>Why is the dashboard static? Is that a real architecture?</dt>
+    <dd>Performance analytics are read-heavy over end-of-day batch data — the same reasoning
+    behind materialized views and OLAP cubes. All computation happens at build time; serving is
+    three static files on a CDN. The trade-offs are owned: data is stale until re-baked,
+    sub-range attribution isn't available, and nothing here is private. A live server would be
+    a thin JSON layer over the same engine functions.</dd>
+    <dt>What are the known limitations?</dt>
+    <dd>Single currency (USD); daily gapless position snapshots assumed (real custodian data
+    violates this); the benchmark must span every held sector; per-sector linked numbers are
+    Cariño-convention-specific; IR is noisy on short ranges; the benchmark aggregation paths
+    use arithmetic sums by design (linking is a report-layer concern). Each is documented
+    rather than hidden.</dd>
+    <dt>How do you know the numbers are right?</dt>
+    <dd>Three layers: <b>golden tests</b> reproduce hand-worked examples (documented in
+    METHODOLOGY.md before the engine was written) to 1e-12, through both pure Kotlin and the
+    real SQL; <b>invariant tests</b> enforce the accounting identities on randomized inputs;
+    <b>equivalence tests</b> require the naive and optimized implementations to agree. The
+    dashboard's client-side math mirrors documented formulas and the baked full-period values
+    are computed by the tested engine.</dd>
+  </dl>
+</section>
+
+<section id="glossary">
+  <h2>10 · Glossary</h2>
+  <p class="sub">quick reference</p>
+  <table>
+    <tr><td><b>bps</b></td><td>Basis points; 100 bps = 1%. Attribution effects are quoted in bps.</td></tr>
+    <tr><td><b>GICS</b></td><td>The standard 11-sector equity classification (Energy, Financials, Info Tech, …).</td></tr>
+    <tr><td><b>Active return</b></td><td>Portfolio return minus benchmark return.</td></tr>
+    <tr><td><b>TWR</b></td><td>Time-weighted return: flow-free sub-periods compounded geometrically.</td></tr>
+    <tr><td><b>Allocation</b></td><td>Effect of sector over/under-weighting vs the benchmark.</td></tr>
+    <tr><td><b>Selection</b></td><td>Effect of stock picks within a sector vs the sector's benchmark return.</td></tr>
+    <tr><td><b>Interaction</b></td><td>Cross-term: being overweight where your picks also outperformed.</td></tr>
+    <tr><td><b>Cariño factor</b></td><td>Per-day scaler (k_t/k) making daily effects sum to geometric active return.</td></tr>
+    <tr><td><b>Tracking error</b></td><td>Annualized volatility of daily active returns.</td></tr>
+    <tr><td><b>Information ratio</b></td><td>Annualized active return per unit of tracking error.</td></tr>
+    <tr><td><b>Max drawdown</b></td><td>Worst peak-to-trough decline of the compounded return path.</td></tr>
+    <tr><td><b>Contribution</b></td><td>weight × return per security; sums to portfolio return.</td></tr>
+    <tr><td><b>Star schema</b></td><td>One large fact table (positions) joined to small dimensions (securities, dates…).</td></tr>
+    <tr><td><b>DuckDB</b></td><td>Embedded columnar OLAP database — vectorized SQL inside the process.</td></tr>
+    <tr><td><b>Parquet</b></td><td>Columnar file format; the ETL's intermediate between generator and database.</td></tr>
+  </table>
+  <p class="small">Deeper detail, with every derivation: <code>docs/METHODOLOGY.md</code> in the
+  repository. Query internals: <code>docs/QUERY_PLAN.md</code>.</p>
+</section>
+
+</div>
+</body>
+</html>

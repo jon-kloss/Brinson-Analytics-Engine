@@ -107,6 +107,7 @@ window.BrinsonDashboard = function (mount, opts) {
           '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="2.5" y1="5.5" x2="13.5" y2="5.5"/><line x1="2.5" y1="10.5" x2="13.5" y2="10.5"/><circle cx="6" cy="5.5" r="1.9" fill="var(--surface)"/><circle cx="10" cy="10.5" r="1.9" fill="var(--surface)"/></svg>' +
         '</button>' +
         '<button class="bx-theme" data-theme-toggle title="Toggle theme"></button>' +
+        '<a class="bx-theme" href="guide.html" title="How this dashboard works" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">?</a>' +
       '</div>' +
     '</header>' +
     '<div class="bx-body">' +

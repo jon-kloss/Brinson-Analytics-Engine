@@ -26,7 +26,7 @@ fun writeDashboard(conn: Connection, outDir: Path, echo: (String) -> Unit) {
     Files.createDirectories(outDir)
     val json = buildDashboardJson(conn)
     outDir.resolve("data.json").toFile().writeText(json)
-    for (asset in listOf("index.html", "styles.css", "dashboard.js")) {
+    for (asset in listOf("index.html", "styles.css", "dashboard.js", "guide.html")) {
         val resource = object {}.javaClass.getResourceAsStream("/dashboard/$asset")
             ?: error("missing bundled dashboard resource: $asset")
         resource.use { outDir.resolve(asset).toFile().writeBytes(it.readBytes()) }
