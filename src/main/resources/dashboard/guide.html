@@ -98,14 +98,16 @@
     <span class="node">DuckDB<br><span class="small">star schema, 10.4M rows</span></span><span class="arr">→</span>
     <span class="node">engine<br><span class="small">Kotlin: TWR · Brinson · Cariño · risk</span></span><span class="arr">→</span>
     <span class="node">data.json<br><span class="small">baked per portfolio</span></span><span class="arr">→</span>
-    <span class="node">dashboard<br><span class="small">static page, no server</span></span>
+    <span class="node">dashboard<br><span class="small">static (Pages) or live API</span></span>
   </div>
   <p>A Kotlin pipeline generates a synthetic two-year equity market, lands it in
   <b>DuckDB</b> (an embedded columnar OLAP database) as a star schema with a
   <b>10,377,750-row</b> daily positions fact table, computes performance analytics with a tested
-  engine, and bakes the results into a 1&nbsp;MB <code>data.json</code>. The dashboard is a
-  <b>static page</b>: no backend, no live queries — GitHub Pages serves three files and the
-  browser renders them with Chart.js.</p>
+  engine, and serves the results two ways: <b>baked static</b> (GitHub Pages serves the files,
+  data frozen at build time) or a <b>live backend</b> (<code>brinson serve</code>, deployed on
+  Railway) whose API is shaped to the page's access pattern — a small market payload and the
+  portfolio list at boot, one portfolio's detail on selection, the weights matrix after first
+  paint. Same page, same charts, three deployment modes.</p>
   <div class="callout"><b>The headline:</b> the core attribution query aggregates the 10.4M-row
   fact table in <b>1.31&nbsp;s</b> inside DuckDB — <b>6.7× faster</b> than pulling the rows into
   the JVM and aggregating there, with both implementations agreeing to within 5.2×10<sup>−17</sup>.
@@ -257,8 +259,10 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
       card pins it as the hero and switches the main chart to the lens that explains it
       (Active → cumulative active return; Max drawdown → underwater chart; TE/IR → rolling
       63-day tracking error; Total return/Benchmark → the cumulative pair).</td></tr>
-    <tr><td><b>Cumulative return</b></td><td>Compounded growth of portfolio (accent) vs benchmark (muted).
-      The vertical gap at the right edge is the geometric active return.</td></tr>
+    <tr><td><b>Main chart</b></td><td>Defaults to compounded growth of portfolio (accent) vs benchmark
+      (muted) — the vertical gap at the right edge is the geometric active return. Hovering pins a
+      <b>crosshair</b> to the nearest trading day with both values in the tooltip. The KPI cards switch
+      this chart between four lenses (below).</td></tr>
     <tr><td><b>Attribution waterfall</b></td><td>Sectors sorted by total effect; each bar <i>starts where the
       previous ended</i>, stepping cumulatively to the final “Active” bar. Bar height = that sector's
       Cariño-linked A+S+I in bps. The table beneath splits each sector into the three effects.</td></tr>
@@ -274,6 +278,52 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
   portfolio's total active return, 467.9 basis points (4.679 percentage points) are attributable
   to decisions in Real Estate — split across how much was held (allocation), what was picked
   (selection), and their interaction.</div>
+
+  <h3>The four chart lenses</h3>
+  <p>Clicking a KPI card answers “show me the story behind this number”:</p>
+  <table>
+    <tr><th>Card</th><th>Chart</th><th>How to read it</th></tr>
+    <tr><td><b>Total return / Benchmark</b></td><td>Cumulative pair</td>
+      <td>The default. Watch where the lines separate and converge — that's <i>when</i> the
+      manager earned or gave back the lead.</td></tr>
+    <tr><td><b>Active</b></td><td>Cumulative active return</td>
+      <td>The gap between the two lines, isolated. Upward slope = periods of outperformance;
+      flat = tracking the benchmark; a cliff = a bad active bet. Far more legible than eyeballing
+      two overlapping lines.</td></tr>
+    <tr><td><b>Max drawdown</b></td><td>Underwater chart</td>
+      <td>Percent below the running peak at every date — the path always hangs at or below zero.
+      The deepest trough is the max-drawdown stat on the card; the <i>width</i> of a trough is
+      the recovery time, which clients often care about more than the depth.</td></tr>
+    <tr><td><b>Tracking error / IR</b></td><td>Rolling tracking error</td>
+      <td>Annualized TE over a sliding 63-trading-day window (~one quarter — long enough to be
+      statistically meaningful, short enough to show regime changes). A stable line means
+      consistent active risk; spikes mean the portfolio's bets concentrated. The headline TE
+      card is the full-period number; this shows whether it was steady or lumpy. The first
+      62 days are blank — the window needs to fill before the first point exists.</td></tr>
+  </table>
+
+  <h3>Calendar periods (MTD / QTD / YTD / 1Y / SI)</h3>
+  <p>Period chips are <b>calendar-anchored</b>, the buy-side reporting convention: month-,
+  quarter-, and year-to-date anchor to the first trading day of the period containing the
+  latest data date; 1Y is one calendar year back; SI is since inception. Every KPI card and
+  the main chart recompute for the selected period from the daily series (attribution,
+  contributors, and weights stay full-period, as labeled).</p>
+  <div class="callout"><b>Why this matters — a real example from this data:</b> Portfolio 007
+  on YTD shows <span class="neg">−3.02%</span> portfolio return but
+  <span class="pos">+4.05%</span> active (IR 1.74): the market fell this year and the manager
+  fell <i>less</i>. “We're down, but four points ahead of the benchmark” is precisely the
+  sentence active managers are paid to say — and trailing windows like “last 6 months” hide it,
+  because clients think in calendar periods.</div>
+
+  <h3>Active weights (the exposures view)</h3>
+  <p>The Sector weights card's <b>Weights | Active</b> toggle switches from “what do I hold”
+  (stacked weekly weights) to “how do I <i>differ from the benchmark</i>”: average
+  <span class="m">wp − wb</span> per sector, in percentage points. Green bars are overweights,
+  red are underweights, and each one is a deliberate bet — Portfolio 007 runs Real Estate
+  ~+8.7pp over and Materials ~−6pp under. This is the “exposures” screen every platform leads
+  with, and it connects directly to attribution: an overweight (this chart) in a sector that
+  beats the benchmark (the waterfall's allocation effect) is the same decision viewed from two
+  angles.</p>
 </section>
 
 <section id="walkthrough">
@@ -293,8 +343,15 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
   <p>“The sector totals are Cariño-linked, so they sum to <b>+767.2&nbsp;bps — exactly</b> the
   geometric active return on the cards. That reconciliation is enforced by tests, not
   approximate.”</p>
-  <p class="small">Practice this paragraph until it's fluid — it demonstrates, in one breath,
-  that you understand performance, risk, attribution, and the linking subtlety.</p>
+  <p>Then drive the dashboard while talking: click <b>Max drawdown</b> — the underwater chart
+  shows the −16.97% trough and how long recovery took. Click <b>Active</b> — the outperformance
+  accrued steadily rather than in one lucky spike, which is what the IR of 1.19 is quantifying.
+  Flip the period to <b>YTD</b> — down −3.02% but +4.05% active, the defensive story. Toggle the
+  weights card to <b>Active</b> — there are the bets behind it all: Real Estate +8.7pp,
+  Materials −6pp.</p>
+  <p class="small">Practice this sequence until it's fluid — it demonstrates, in one breath,
+  that you understand performance, risk, attribution, the linking subtlety, and how a
+  practitioner actually navigates the screen.</p>
 </section>
 
 <section id="qa">
@@ -337,6 +394,13 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
     Cariño-convention-specific; IR is noisy on short ranges; the benchmark aggregation paths
     use arithmetic sums by design (linking is a report-layer concern). Each is documented
     rather than hidden.</dd>
+    <dt>Why these particular cards, periods, and views?</dt>
+    <dd>They mirror what production platforms surface. Calendar-anchored periods
+    (MTD/QTD/YTD/1Y/SI) are how factsheets and client reports state returns; the headline strip
+    (return / benchmark / active / TE / IR / max drawdown) is the standard performance-and-risk
+    summary; exposures-vs-benchmark is a first-class screen in platforms like Ridgeline and
+    FactSet. And every card answers a click with the chart that explains it — a stat you can't
+    drill into is a stat the user has to take on faith.</dd>
     <dt>How do you know the numbers are right?</dt>
     <dd>Three layers: <b>golden tests</b> reproduce hand-worked examples (documented in
     METHODOLOGY.md before the engine was written) to 1e-12, through both pure Kotlin and the
@@ -362,6 +426,10 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
     <tr><td><b>Tracking error</b></td><td>Annualized volatility of daily active returns.</td></tr>
     <tr><td><b>Information ratio</b></td><td>Annualized active return per unit of tracking error.</td></tr>
     <tr><td><b>Max drawdown</b></td><td>Worst peak-to-trough decline of the compounded return path.</td></tr>
+    <tr><td><b>Underwater chart</b></td><td>Percent below the running peak at every date; troughs are drawdowns, their width is recovery time.</td></tr>
+    <tr><td><b>Rolling TE</b></td><td>Tracking error over a sliding 63-trading-day (~quarterly) window — shows whether active risk was steady.</td></tr>
+    <tr><td><b>Active weight</b></td><td>wp − wb per sector: the size of the over/underweight bet vs the benchmark, in percentage points.</td></tr>
+    <tr><td><b>MTD / QTD / YTD / SI</b></td><td>Month / quarter / year-to-date and since-inception — calendar-anchored reporting periods.</td></tr>
     <tr><td><b>Contribution</b></td><td>weight × return per security; sums to portfolio return.</td></tr>
     <tr><td><b>Star schema</b></td><td>One large fact table (positions) joined to small dimensions (securities, dates…).</td></tr>
     <tr><td><b>DuckDB</b></td><td>Embedded columnar OLAP database — vectorized SQL inside the process.</td></tr>
