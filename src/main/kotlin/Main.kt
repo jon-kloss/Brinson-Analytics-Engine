@@ -10,7 +10,9 @@ import com.github.ajalt.clikt.parameters.types.int
 import com.github.ajalt.clikt.parameters.types.long
 import datagen.DataGenerator
 import datagen.GenParams
+import etl.Rebalance
 import etl.TABLES
+import etl.buildModelPortfolio
 import etl.importPortfolio
 import etl.loadFromParquet
 import etl.openDatabase
@@ -151,6 +153,34 @@ class Import : CliktCommand(name = "import") {
     }
 }
 
+class Model : CliktCommand(name = "model") {
+    private val name by option(help = "Portfolio display name").required()
+    private val holdings by option(
+        help = "Target weights as TICKER=WEIGHT pairs (fractions or percents), e.g. SEC001=60,SEC002=40",
+    ).required()
+    private val rebalance by option(help = "none | monthly | quarterly").default("monthly")
+    private val db by option().default("data/brinson.duckdb")
+
+    override fun run() {
+        val parsed = holdings.split(",").map { pair ->
+            val parts = pair.split("=")
+            require(parts.size == 2 && parts[1].toDoubleOrNull() != null) {
+                "bad holding '$pair' — expected TICKER=WEIGHT"
+            }
+            parts[0].trim() to parts[1].toDouble()
+        }
+        val freq = Rebalance.entries.firstOrNull { it.name.equals(rebalance, ignoreCase = true) }
+            ?: throw IllegalArgumentException("bad --rebalance '$rebalance' — use none, monthly, or quarterly")
+        openDatabase(Path.of(db)).use { conn ->
+            val r = buildModelPortfolio(conn, name, parsed, freq)
+            echo("Built model '${r.name}' as portfolio ${r.portfolioId}:")
+            echo("  %,d position rows | %d holdings | %s .. %s | rebalance: %s | %d flow days (0 = self-financing)"
+                .format(r.positionRows, r.tickers, r.from, r.to, rebalance.lowercase(), r.flowDays))
+            echo("Re-run 'brinson dashboard' (or restart 'serve') to surface it.")
+        }
+    }
+}
+
 class Serve : CliktCommand(name = "serve") {
     private val db by option().default("data/brinson.duckdb")
     private val port by option(help = "Listen port (default: \$PORT or 8080)").int()
@@ -164,4 +194,4 @@ class Serve : CliktCommand(name = "serve") {
 }
 
 fun main(args: Array<String>) =
-    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard(), Serve(), Import()).main(args)
+    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard(), Serve(), Import(), Model()).main(args)

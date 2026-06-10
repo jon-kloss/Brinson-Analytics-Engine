@@ -176,6 +176,8 @@ build/install/brinson/bin/brinson serve              # http://localhost:8080
 # GET /api/market                  dates, benchmark series, sectors (gzip ~3.6 KB)
 # GET /api/portfolio/{id}          returns/risk/attribution/contributors (gzip ~2.6 KB)
 # GET /api/portfolio/{id}/weights  weights matrix, loaded after first paint (gzip ~2.8 KB)
+# GET /api/securities              model-eligible tickers for the builder picker
+# POST /api/model?name=&rebalance= build a model portfolio (body: TICKER,WEIGHT lines)
 # GET /api/data                    full document (bulk; /data.json is an alias)
 # GET /healthz                     liveness probe    (CORS * and gzip on everything)
 ```
@@ -195,6 +197,14 @@ validated transactionally (GICS sectors, gapless calendar, complete matrix, posi
 Returns are derived from the prices; external cash flows are estimated from share changes
 valued at the prior close. Each portfolio is reported over its own lifespan. On Railway the
 DB lives in the image, so imports persist until the next deploy.
+
+**Building a model portfolio:** `brinson model --name "Tech Tilt" --holdings "SEC001=60,SEC002=40"
+--rebalance monthly` (or the dashboard's ⊕ builder against a live backend / `POST /api/model`).
+This is the front-office *model-based investing* workflow: target weights over the full history,
+rebalanced on the first trading day of each month/quarter with orders sized at the prior close —
+sells fund buys exactly, so the model is self-financing (zero estimated external flows) and
+weights drift with returns between rebalances. The model compiles into the same holdings
+contract the importer validates, then gets attributed like any other portfolio.
 
 **Deploying (e.g. Railway):** the repo's `Dockerfile` builds the app and **bakes the seeded
 dataset into the image at build time** — deterministic generation means the deployed data

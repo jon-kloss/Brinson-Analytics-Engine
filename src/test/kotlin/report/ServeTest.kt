@@ -74,6 +74,31 @@ class ServeTest {
             assertEquals(200, w1.statusCode())
             assertContains(w1.body(), "\"weights\"")
 
+            // Builder endpoints: the pick list, and model creation end-to-end.
+            val secs = get("/api/securities")
+            assertEquals(200, secs.statusCode())
+            assertContains(secs.body(), "\"t\":\"SEC001\"")
+            fun postModel(query: String, body: String): HttpResponse<String> =
+                client.send(
+                    HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port/api/model$query"))
+                        .POST(HttpRequest.BodyPublishers.ofString(body)).build(),
+                    HttpResponse.BodyHandlers.ofString(),
+                )
+            val made = postModel("?name=My%20Model&rebalance=monthly", "SEC001,60\nSEC002,40\n")
+            assertEquals(201, made.statusCode(), made.body())
+            assertContains(made.body(), "\"holdings\":2")
+            // The snapshot was rebuilt: the new portfolio is immediately live.
+            assertContains(get("/api/portfolios").body(), "My Model")
+            val newId = Regex("\"id\":(\\d+)").find(made.body())!!.groupValues[1]
+            val modelCore = get("/api/portfolio/$newId")
+            assertEquals(200, modelCore.statusCode())
+            // Two holdings all fit in "top": "bottom" must not repeat them.
+            assertContains(modelCore.body(), "\"bottom\":[]")
+            assertEquals(400, postModel("", "SEC001,30\nSEC002,30\n").statusCode(), "weights must sum")
+            assertEquals(400, postModel("", "NOPE,100\n").statusCode(), "unknown ticker")
+            assertEquals(400, postModel("?rebalance=hourly", "SEC001,100\n").statusCode(), "bad frequency")
+            assertEquals(400, postModel("", "garbage line\n").statusCode(), "unparseable body")
+
             // The full document is the pieces spliced back together — they cannot drift.
             assertContains(api.body(), p1.body().dropLast(1), message = "full must embed detail core")
             assertContains(api.body(), w1.body().removePrefix("{").removeSuffix("}"))

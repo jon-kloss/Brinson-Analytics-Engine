@@ -346,6 +346,14 @@ factor₂ = 1.074680545305  → scaled active −3.2240%
       are estimated from share changes at the prior close; the import is validated and
       transactional, and rejected files leave everything untouched. On the hosted demo,
       uploads persist until the next deploy.</td></tr>
+    <tr><td><b>Build (⊕)</b></td><td>Live-backend only: the <b>model portfolio builder</b> — pick
+      securities, set target weights that total 100%, choose a rebalance schedule (monthly,
+      quarterly, or buy &amp; hold), and the engine compiles a portfolio over the full history.
+      This is the front-office workflow platforms call <i>model-based investing</i>: orders are
+      sized at the prior close, sells fund buys exactly (the model is self-financing, so estimated
+      external flows are zero), and between rebalances weights drift with returns. The result is
+      attributed and risk-reported like any other portfolio — try a deliberate sector tilt and
+      watch it show up as allocation effect in the waterfall.</td></tr>
   </table>
   <div class="callout"><b>How to read a waterfall bar:</b> “Real Estate +467.9” means: of the
   portfolio's total active return, 467.9 basis points (4.679 percentage points) are attributable

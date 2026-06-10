@@ -321,6 +321,32 @@ table.bx-tab .neg { color: var(--down); }
 .bx-modal-table table.bx-tab td { padding: 7px 10px; font-size: 12px; }
 .bx-modal-table table.bx-tab td:first-child { font-size: 13px; }
 
+/* ── Model portfolio builder ──────────────────────────────────────────── */
+.bx-build-card { width: min(560px, 96vw); height: auto; max-height: min(820px, 92vh); }
+.bx-build { gap: 12px; }
+.bx-build-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 0 0 auto; }
+.bx-binput { background: var(--surface-2); border: 1px solid var(--line-2); color: var(--ink);
+  border-radius: 7px; padding: 8px 10px; font: 500 13px var(--font-sans); min-width: 0; }
+.bx-binput:focus { outline: none; border-color: var(--accent); }
+.bx-build-top .bx-binput { flex: 1 1 180px; }
+.bx-build-head, .bx-build-h { display: grid; grid-template-columns: 1.1fr 1fr 84px 26px; gap: 8px; align-items: center; flex: 0 0 auto; }
+.bx-build-head { font: 600 9.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: -6px; }
+.bx-build-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 0 1 auto; min-height: 40px; }
+.bx-build-h input[type="number"] { font-family: var(--font-mono); text-align: right; }
+.bx-build-sec { font: 500 11px var(--font-mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bx-build-del { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 11px; padding: 5px; border-radius: 5px; line-height: 1; }
+.bx-build-del:hover { color: var(--down); background: var(--surface-2); }
+.bx-build-actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+.bx-bbtn { background: transparent; border: 1px solid var(--line-2); color: var(--muted); border-radius: 7px;
+  padding: 7px 12px; font: 600 12px var(--font-sans); cursor: pointer; transition: color .12s, border-color .12s; }
+.bx-bbtn:hover { border-color: var(--accent); color: var(--accent); }
+.bx-bbtn-primary { background: var(--accent); border-color: var(--accent); color: #fff; align-self: flex-end; padding: 9px 18px; }
+.bx-bbtn-primary:hover { color: #fff; filter: brightness(1.08); }
+.bx-bbtn-primary:disabled { opacity: 0.55; cursor: default; }
+.bx-build-sum { margin-left: auto; font: 600 12px var(--font-mono); color: var(--down); }
+.bx-build-sum.ok { color: var(--up); }
+.bx-build-err { color: var(--down); font: 500 12px var(--font-sans); min-height: 15px; flex: 0 0 auto; }
+
 /* ── Responsive ───────────────────────────────────────────────────────────
    Verified against 390px screenshots. Three concerns:
    1. blowout guards — grid/flex items must be allowed to shrink, else the
