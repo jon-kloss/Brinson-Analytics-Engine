@@ -244,7 +244,7 @@
 .bx-col .bx-card .bx-chartwrap { flex: 1 1 auto; }
 
 /* scroll-fit mode (standalone full-screen page): content flows, no clipping */
-.brinson[data-fit="scroll"] { height: auto; min-height: 100%; }
+.brinson[data-fit="scroll"] { height: auto; min-height: 100dvh; }
 .brinson[data-fit="scroll"] .bx-body { overflow: visible; }
 .brinson[data-fit="scroll"] .bx-grid2 { flex: none; align-items: start; }
 .brinson[data-fit="scroll"] .bx-col .bx-card { flex: none; }
