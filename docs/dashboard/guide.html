@@ -57,7 +57,11 @@
   a { color:var(--accent-deep); }
   .back { position:fixed; top:16px; right:16px; background:var(--surface); border:1px solid var(--line);
     border-radius:999px; padding:7px 14px; font-size:.82rem; text-decoration:none; box-shadow:0 1px 3px rgba(22,27,38,.08); }
-  @media (max-width:700px){ section,header.hero{padding:20px;} .back{display:none;} }
+  @media (max-width:700px){
+    section,header.hero{padding:20px;} .back{display:none;}
+    table{display:block;overflow-x:auto;white-space:nowrap;}
+    .pipeline{font-size:.75rem;}
+  }
 </style>
 </head>
 <body>
@@ -137,9 +141,10 @@
   <b>contributors</b>, and <b>weekly sector weights</b>. Daily series are what let the range
   buttons recompute returns and risk client-side; attribution stays full-period because
   recomputing it for arbitrary ranges would need the per-day×sector effect matrix (~30&nbsp;MB).
-  Against the live backend the same payloads are served <b>granularly</b> —
-  <code>/api/meta</code> plus <code>/api/portfolio/{id}</code> — so the browser downloads
-  ~34&nbsp;KB up front and ~20&nbsp;KB per portfolio switch instead of the 1&nbsp;MB document.</p>
+  Against the live backend the API is shaped by the page's <b>access pattern</b> —
+  <code>/api/portfolios</code> and <code>/api/market</code> at boot, <code>/api/portfolio/{id}</code>
+  on selection, and the heavy weights matrix on its own endpoint after first paint — so the
+  first render costs ~6.5&nbsp;KB over the wire (gzip) instead of the 1&nbsp;MB document.</p>
 </section>
 
 <section id="twr">
