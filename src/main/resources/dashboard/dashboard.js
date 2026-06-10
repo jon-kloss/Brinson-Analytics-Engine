@@ -252,12 +252,37 @@ window.BrinsonDashboard = function (mount, opts) {
     }, extra || {});
   }
 
+  // Vertical guide pinned to the hovered date on the cumulative-return chart,
+  // so it is explicit where in time the tooltip values apply. Drawn whenever the
+  // index-mode tooltip is active (mouse or touch), in cards and in the modal.
+  var bxCrosshair = {
+    id: "bxCrosshair",
+    afterDatasetsDraw: function (chart) {
+      var t = chart.tooltip;
+      if (!t || !t.getActiveElements || t.getActiveElements().length === 0 || t.opacity === 0) return;
+      var x = t.getActiveElements()[0].element.x;
+      var area = chart.chartArea, c = chart.ctx;
+      if (x < area.left || x > area.right) return;
+      c.save();
+      c.beginPath();
+      c.setLineDash([4, 3]);
+      c.lineWidth = 1;
+      c.strokeStyle = tok("--faint");
+      c.globalAlpha = 0.85;
+      c.moveTo(x, area.top);
+      c.lineTo(x, area.bottom);
+      c.stroke();
+      c.restore();
+    }
+  };
+
   function perfCfg(model) {
     var accent = tok("--accent"), muted = tok("--faint"), fillStudio = state.areaFill;
     var tension = state.variant === "studio" ? 0.28 : 0;
     var lw = state.lineWeight != null ? state.lineWeight : (state.variant === "desk" ? 1.75 : (state.variant === "ledger" ? 2.25 : 2.5));
     return {
       type: "line",
+      plugins: [bxCrosshair],
       data: {
         labels: model.dates,
         datasets: [
