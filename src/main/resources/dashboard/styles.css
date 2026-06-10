@@ -237,6 +237,21 @@
 .bx-contrib-wrap { height: 150px; }
 .bx-wts-wrap { height: 175px; } /* 11 stacked bands need headroom for in-band labels */
 
+/* Docked weights readout: lives beside the chart (never over it), shows the
+   latest week by default and live-updates to the week under the crosshair.
+   .bx-wts-flex is the layout (card and modal); .bx-wts-wrap only sets height. */
+.bx-wts-flex { display: flex; gap: 12px; }
+.bx-wts-chart { flex: 1 1 auto; min-width: 0; position: relative; }
+.bx-wts-read { flex: 0 0 128px; font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--faint); display: flex; flex-direction: column; justify-content: center;
+  gap: 1px; overflow: hidden; white-space: nowrap; }
+.bx-wts-read .d { color: var(--ink); font-weight: 600; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; }
+.bx-wts-read .r { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bx-wts-read .r .n { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bx-wts-read .r .n i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.bx-wts-read .r b { font-weight: 500; color: var(--ink); }
+.bx-modal-chart .bx-wts-read { flex: 0 0 172px; font-size: 11.5px; gap: 4px; }
+
 /* two-column lower grid */
 .bx-grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: var(--gap); flex: 1 1 auto; min-height: 0; }
 .bx-col { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
@@ -377,6 +392,7 @@ table.bx-tab .neg { color: var(--down); }
   .bx-perf .bx-chartwrap, .brinson[data-fit="scroll"] .bx-perf .bx-chartwrap { height: 220px; }
   .bx-wf-wrap, .bx-contrib-wrap { height: 185px; }
   .bx-wts-wrap { height: 215px; } /* taller bands: every sector label fits on a phone */
+  .bx-wts-read, .bx-modal-chart .bx-wts-read { flex-basis: 134px; font-size: 10.5px; gap: 2px; }
   .bx-modal-head h2 { font-size: 17px; }
 }
 
