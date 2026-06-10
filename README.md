@@ -162,6 +162,28 @@ client-side from the baked daily return series using the METHODOLOGY.md formulas
 (Opening `index.html` from the filesystem won't work — `fetch` needs HTTP; use Pages or
 `python3 -m http.server` in the directory.)
 
+## Live backend
+
+`brinson serve` runs the same dashboard against a **live backend** — a zero-dependency HTTP
+server (JDK built-in) that computes the dashboard JSON from the DuckDB file at boot and
+serves it alongside the static assets:
+
+```bash
+build/install/brinson/bin/brinson serve            # http://localhost:8080
+# GET /            the dashboard          GET /api/data    live JSON (CORS: *)
+# GET /healthz     liveness probe         GET /data.json   alias of /api/data
+```
+
+The frontend resolves its data source in order: `?api=<url>` query override → `api/data`
+(present when served by the backend) → `data.json` (the baked static file on GitHub Pages).
+One bundle, three deployment modes.
+
+**Deploying (e.g. Railway):** the repo's `Dockerfile` builds the app and **bakes the seeded
+dataset into the image at build time** — deterministic generation means the deployed data
+is bit-for-bit the data behind the benchmark numbers, and containers cold-start instantly.
+`$PORT` is honored automatically. Build with `--build-arg SCALE=0.25` for small instances
+(the full-scale boot query wants ~2 GB of memory).
+
 ## Quickstart
 
 ```bash

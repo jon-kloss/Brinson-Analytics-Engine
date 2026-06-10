@@ -22,6 +22,7 @@ import report.buildHtmlReport
 import report.buildReport
 import report.printQueryPlan
 import report.runBench
+import report.serve
 import report.writeDashboard
 
 class Brinson : CliktCommand(name = "brinson") {
@@ -130,5 +131,17 @@ class Dashboard : CliktCommand(name = "dashboard") {
     }
 }
 
+class Serve : CliktCommand(name = "serve") {
+    private val db by option().default("data/brinson.duckdb")
+    private val port by option(help = "Listen port (default: \$PORT or 8080)").int()
+        .default(System.getenv("PORT")?.toIntOrNull() ?: 8080)
+
+    override fun run() {
+        serve(Path.of(db), port, ::echo)
+        // The JDK HttpServer runs on non-daemon executor threads; block forever.
+        Thread.currentThread().join()
+    }
+}
+
 fun main(args: Array<String>) =
-    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard()).main(args)
+    Brinson().subcommands(Generate(), Load(), Report(), Bench(), Dashboard(), Serve()).main(args)

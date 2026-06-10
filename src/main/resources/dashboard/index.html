@@ -27,8 +27,20 @@ directory) — browsers block <code>fetch</code> from <code>file://</code>.</div
 "use strict";
 // Production bootstrap: bake the design settings chosen in Claude Design
 // (studio variant, green accent, hero KPI layout) and feed the real data.
-fetch("data.json")
-  .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+//
+// Data source resolution, first success wins:
+//   1. ?api=<url>   explicit backend (e.g. ?api=https://brinson.up.railway.app/api/data)
+//   2. api/data     live backend, when this page is served by `brinson serve`
+//   3. data.json    baked static file (GitHub Pages)
+var override = new URLSearchParams(location.search).get("api");
+var sources = override ? [override] : ["api/data", "data.json"];
+function tryFetch(i) {
+  if (i >= sources.length) return Promise.reject(new Error("no data source reachable"));
+  return fetch(sources[i])
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .catch(function () { return tryFetch(i + 1); });
+}
+tryFetch(0)
   .then(function (d) {
     window.BRINSON_DATA = d;
     window.BrinsonDashboard(document.getElementById("stage"), {
