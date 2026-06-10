@@ -105,6 +105,10 @@ window.BrinsonDashboard = function (mount, opts) {
 
   function applyStyle() {
     root.setAttribute("data-theme", state.theme);
+    // The page canvas behind/below the dashboard must match the theme, or a
+    // light strip shows on screens taller than the content (and on overscroll).
+    document.body.style.background = tok("--bg");
+    document.documentElement.style.background = tok("--bg");
     root.setAttribute("data-fit", state.fit);
     root.setAttribute("data-kpilayout", state.layout);
     root.setAttribute("data-cardstyle", state.cardStyle);
